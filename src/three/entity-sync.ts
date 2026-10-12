@@ -2,8 +2,10 @@ import * as THREE from 'three';
 import type { WarehouseLayout } from '@/lib/layout/types';
 import { forEachRackSlot } from '@/lib/layout/pinto-layout';
 import type { Machine, SimState, Truck } from '@/lib/sim/types';
-import { createCounterbalance, createOrderPicker, createPalletTruck, createReachTruck, createTruck } from '@/three/builders/models';
+import { createErE225i, createOrderPicker, createPalletTruck, createReachTruck, createTruck, TRAILER_DOCK_LIFT } from '@/three/builders/models';
 import type { RacksModel } from '@/three/builders/build-racks';
+import { DOCK_EDGE_Z, DOCK_FACE_Z, DOCK_PLATFORM_H } from '@/three/builders/build-building';
+import { newKin, stepKin, type Kin, type KinOpts } from '@/three/motion';
 
 /** Sube al GPU solo el rango de instancias modificado en este fotograma. */
 function uploadRange(mesh: THREE.InstancedMesh, range: { min: number; max: number }) {
@@ -23,24 +25,36 @@ type ModelRef = {
   body?: THREE.Object3D;
   /** Recogida en curso: cuántos palés del lote ya se muestran en la máquina. */
   pickRun?: { taskId: string; total: number };
-  /** Pose suavizada del camión (posición y rumbo que se dibujan). */
-  pose?: TruckPose;
+  /** Cinemática suavizada de la pose dibujada (posición, rumbo y velocidad). */
+  kin?: Kin;
+  /** Piezas móviles: ruedas (giran con la distancia), semirremolque (sube al atracar), operario. */
+  wheels?: THREE.Object3D[];
+  wheelRadius?: number;
+  trailerBody?: THREE.Object3D;
+  /** Altura suavizada del semirremolque (0 en la calle, TRAILER_DOCK_LIFT en el andén). */
+  trailerLift?: number;
+  operator?: THREE.Object3D;
+  /** Fase de balanceo del operario. */
+  swayPhase?: number;
+  /** Inclinación suavizada del operario al cargar (0 = erguido). */
+  lean?: number;
 };
 
-type TruckPose = { x: number; z: number; heading: number };
-
-/** Posición z de la origen del camión retrocedido en el muelle (trasera del remolque ~1 m antes de la puerta z=80). */
-const DOCK_TRUCK_Z = 92.6;
-/** Velocidad de convergencia de la pose dibujada hacia la pose de la simulación (1/s). */
-const TRUCK_SMOOTH_RATE = 8;
-
-/** Diferencia angular mínima entre dos rumbos, en (−π, π]. */
-function shortestAngle(d: number): number {
-  let a = d % (Math.PI * 2);
-  if (a > Math.PI) a -= Math.PI * 2;
-  if (a <= -Math.PI) a += Math.PI * 2;
-  return a;
-}
+/** Punto de la cara trasera del semirremolque en el andén: la caja de 13,6 m queda a 0,1 m del borde del andén (z=82,4). */
+const DOCK_TRUCK_REAR_Z = DOCK_EDGE_Z + 0.1;
+/** Origen del camión atracado: su remolque (trasera en local z=+11,6) mira hacia la nave con heading π. */
+const DOCK_TRUCK_Z = DOCK_TRUCK_REAR_Z + 11.6;
+/** Tramo de rampa interior de la niveladora (de z=79,8 a z=74,8), donde las máquinas suben al andén. */
+const RAMP_Z_FAR = DOCK_FACE_Z - 5.2;
+const RAMP_Z_NEAR = DOCK_FACE_Z - 0.2;
+/** Radio de la rueda de las máquinas y de los camiones (para el giro según la distancia). */
+const MACHINE_WHEEL_R = 0.13;
+const TRUCK_WHEEL_R = 0.4;
+/** Límites de movimiento: máquinas y camiones (presentación). */
+const MACHINE_KIN: KinOpts = { maxSpeed: 3.0, accel: 2.0, turnRate: 2.6, frontAxis: 'pz', snapDist: 12 };
+const TRUCK_KIN: KinOpts = { maxSpeed: 4.5, accel: 1.4, turnRate: 0.9, frontAxis: 'nz', snapDist: 25 };
+/** Velocidad de convergencia de la inclinación del operario y de la altura del semirremolque (1/s). */
+const SMOOTH_RATE = 6;
 
 /** Altura de un palé en rack (igual que en build-racks). */
 const RACK_PALET_H = 1.2;
@@ -128,11 +142,12 @@ export class EntitySync {
   private getMachine(id: string, kind: string): ModelRef {
     let ref = this.machines.get(id);
     if (ref) return ref;
+    // 'frontal' es el identificador interno de la ERE 225i (apilador Jungheinrich).
     const created =
       kind === 'retractil'
         ? createReachTruck()
         : kind === 'frontal'
-          ? createCounterbalance()
+          ? createErE225i()
           : kind === 'transpaleta'
             ? createPalletTruck()
             : createOrderPicker();
@@ -143,7 +158,13 @@ export class EntitySync {
       forks: created.nodes.forks,
       forkBase: created.nodes.forks.position.y,
       body: created.nodes.body,
+      wheels: created.nodes.wheels,
+      wheelRadius: MACHINE_WHEEL_R,
+      kin: undefined,
+      swayPhase: 0,
+      lean: 0,
     };
+    if (created.nodes.operator) ref.operator = created.nodes.operator;
     this.machineLayer.add(created.group);
     this.machines.set(id, ref);
     return ref;
@@ -155,7 +176,14 @@ export class EntitySync {
     const t = createTruck({ reefer });
     t.group.userData.entityId = id;
     t.group.userData.entityKind = 'truck';
-    ref = { group: t.group, forkBase: 0 };
+    ref = {
+      group: t.group,
+      forkBase: 0,
+      trailerBody: t.nodes.trailerBody,
+      wheels: t.nodes.wheels,
+      wheelRadius: TRUCK_WHEEL_R,
+      trailerLift: 0,
+    };
     this.truckLayer.add(t.group);
     this.trucks.set(id, ref);
     return ref;
@@ -292,15 +320,76 @@ export class EntitySync {
   }
 
   /**
-   * Pose de dibujo del camión. En el muelle, el camión se dibuja retrocedido: el remolque (13,6 m, trasera
-   * hacia +Z en el modelo) apoya su trasera junto a la puerta (z=80) y la tractora queda en el patio.
+   * Pose de destino del camión. En el muelle, el camión se dibuja retrocedido: la trasera del remolque
+   * (13,6 m) apoya en el borde del andén (z=82,5) y la tractora queda en el patio.
    */
-  private truckPose(t: Truck): TruckPose {
+  private truckPose(t: Truck): { x: number; z: number; heading: number } {
     if (t.status === 'at_dock' && t.dockId) {
       const dock = this.layout.docks.find((d) => d.id === t.dockId);
       if (dock) return { x: dock.x, z: DOCK_TRUCK_Z, heading: Math.PI };
     }
     return { x: t.pos.x, z: t.pos.z, heading: t.heading ?? 0 };
+  }
+
+  /** Altura del suelo bajo una máquina: la rampa de la niveladora sube desde la nave hasta el andén. */
+  private floorY(x: number, z: number): number {
+    if (z < RAMP_Z_FAR || z > RAMP_Z_NEAR) return 0;
+    for (const dock of this.layout.docks) {
+      if (Math.abs(x - dock.x) < 1.6) return (DOCK_PLATFORM_H * (z - RAMP_Z_FAR)) / (RAMP_Z_NEAR - RAMP_Z_FAR);
+    }
+    return 0;
+  }
+
+  /** Pose dibujada de una máquina: giro en arco, aceleración suave, ruedas y operario (presentación). */
+  private animateMachine(ref: ModelRef, m: Machine, shift: number, dt: number) {
+    const tx = m.pos.x;
+    const tz = m.pos.z + shift;
+    if (!ref.kin) ref.kin = newKin(tx, tz, m.heading);
+    const k = ref.kin;
+    const dist = stepKin(k, tx, tz, { mode: 'fixed', h: m.heading }, dt, MACHINE_KIN);
+    ref.group.position.set(k.x, this.floorY(k.x, k.z), k.z);
+    ref.group.rotation.y = k.heading;
+    if (ref.forks) ref.forks.position.y = ref.forkBase + m.liftHeight;
+    this.spinWheels(ref, dist);
+
+    // Operario: balanceo al conducir (proporcional a lo recorrido) e inclinación al llevar palés.
+    if (ref.operator) {
+      ref.swayPhase = (ref.swayPhase ?? 0) + dist * 5;
+      const carrying = m.carriedPalets.length > 0 ? 0.22 : 0;
+      ref.lean = (ref.lean ?? 0) + (carrying - (ref.lean ?? 0)) * (1 - Math.exp(-dt * SMOOTH_RATE));
+      const speed = dist / Math.max(dt, 1e-6);
+      ref.operator.rotation.z = Math.sin(ref.swayPhase) * Math.min(0.06, speed * 0.02);
+      ref.operator.rotation.x = ref.lean;
+    }
+  }
+
+  /** Pose dibujada de un camión: marcha atrás al atracar, giro en arco y semirremolque que sube al andén. */
+  private animateTruck(ref: ModelRef, t: Truck, dt: number) {
+    const target = this.truckPose(t);
+    if (!ref.kin) ref.kin = newKin(target.x, target.z, target.heading);
+    // Al acercarse al muelle entra de espaldas (el frente mira hacia la calle); en el muelle queda con heading π.
+    const heading =
+      t.status === 'at_dock'
+        ? ({ mode: 'fixed', h: target.heading } as const)
+        : t.status === 'approaching' && t.dockId
+          ? ({ mode: 'reverse' } as const)
+          : ({ mode: 'forward' } as const);
+    const dist = stepKin(ref.kin, target.x, target.z, heading, dt, TRUCK_KIN);
+    ref.group.position.set(ref.kin.x, 0, ref.kin.z);
+    ref.group.rotation.y = ref.kin.heading;
+    this.spinWheels(ref, dist);
+
+    // Semirremolque: sube a altura de andén al atracar y baja al salir.
+    const liftTarget = t.status === 'at_dock' ? TRAILER_DOCK_LIFT : 0;
+    ref.trailerLift = (ref.trailerLift ?? 0) + (liftTarget - (ref.trailerLift ?? 0)) * (1 - Math.exp(-dt * SMOOTH_RATE));
+    if (ref.trailerBody) ref.trailerBody.position.y = ref.trailerLift;
+  }
+
+  /** Giro de las ruedas según la distancia recorrida (eje de rueda = X local). */
+  private spinWheels(ref: ModelRef, dist: number) {
+    if (!ref.wheels || !ref.wheelRadius || dist <= 0) return;
+    const turn = dist / ref.wheelRadius;
+    for (const w of ref.wheels) w.rotation.x += turn;
   }
 
   /** Sincroniza máquinas, camiones, palets sueltos y huecos de rack con el snapshot de la simulación. */
@@ -322,9 +411,7 @@ export class EntitySync {
       sharing.set(key, slot + 1);
       const ref = this.getMachine(m.id, m.kind);
       const shift = slot * 1.1;
-      ref.group.position.set(m.pos.x, 0, m.pos.z + shift);
-      ref.group.rotation.y = m.heading;
-      if (ref.forks) ref.forks.position.y = ref.forkBase + m.liftHeight;
+      this.animateMachine(ref, m, shift, dt);
       this.updateRoute(ref, m);
     }
 
@@ -337,19 +424,7 @@ export class EntitySync {
       }
     }
     for (const t of state.trucks) {
-      const ref = this.getTruck(t.id, t.temp !== 'dry');
-      const target = this.truckPose(t);
-      if (!ref.pose) {
-        ref.pose = { ...target };
-      } else {
-        // Suavizado: el camión llega al muelle girando hacia atrás sin saltar.
-        const k = 1 - Math.exp(-dt * TRUCK_SMOOTH_RATE);
-        ref.pose.x += (target.x - ref.pose.x) * k;
-        ref.pose.z += (target.z - ref.pose.z) * k;
-        ref.pose.heading += shortestAngle(target.heading - ref.pose.heading) * k;
-      }
-      ref.group.position.set(ref.pose.x, 0, ref.pose.z);
-      ref.group.rotation.y = ref.pose.heading;
+      this.animateTruck(this.getTruck(t.id, t.temp !== 'dry'), t, dt);
     }
 
     // Cada palé se dibuja una sola vez: idx avanza por la malla dinámica y `drawn` evita repetirlos.

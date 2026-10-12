@@ -10,8 +10,13 @@ export interface AnimatedMachine {
     wheels: THREE.Object3D[];
     body: THREE.Object3D;
     palletGrip: THREE.Group;
+    /** Operario a pie o sentado (si lo lleva), para balanceo y cambio de postura. */
+    operator?: THREE.Object3D;
   };
 }
+
+/** Altura del piso del semirremolque cuando está atracado (altura de andén, 1,2 m). */
+export const TRAILER_DOCK_LIFT = 0.65;
 
 const BLUE = 0x1f3d7a;
 const ORANGE = 0xf39200;
@@ -79,52 +84,67 @@ export function createReachTruck(): AnimatedMachine {
   return { group: g, nodes: { forks, mast, wheels, body: chassis, palletGrip } };
 }
 
-/** Carretilla frontal contrapesada: chasis, contrapeso, mástil corto y cabina. */
-export function createCounterbalance(): AnimatedMachine {
+/**
+ * Apilador eléctrico Jungheinrich ERE 225i: transpaleta con plataforma baja, mástil corto y operario a pie
+ * que lleva el timón. Proporciones de transpaleta eléctrica (no de contrapesada).
+ */
+export function createErE225i(): AnimatedMachine {
   const g = group3();
+  const BODY = 0x2b4f8a;
 
-  const chassis = box(1.1, 0.6, 1.7, lambert(YELLOW));
-  chassis.position.y = 0.4;
+  // Chasis bajo y cubierta de batería.
+  const chassis = box(0.8, 0.3, 1.5, lambert(BODY));
+  chassis.position.y = 0.2;
   g.add(chassis);
+  g.add(box(0.74, 0.2, 0.9, lambert(0x3a4a5c), 0, 0.4, -0.25));
 
-  const cab = box(1.0, 0.7, 0.5, lambert(0xc9a227));
-  cab.position.set(0, 0.95, -0.35);
-  g.add(cab);
-
-  const counterweight = box(1.1, 0.5, 0.4, lambert(0x3a3f47));
-  counterweight.position.set(0, 0.62, -0.95);
-  g.add(counterweight);
-
+  // Mástil corto (a 1,3 m) con dos montantes y travesaño.
   const mast = new THREE.Group();
-  mast.position.set(0, 0.9, 0.35);
+  mast.position.set(0, 0.3, 0.6);
   g.add(mast);
-  const mastPost = box(0.28, 1.5, 0.2, metalMat(), 0, 0.7, 0);
-  mast.add(mastPost);
+  mast.add(box(0.08, 1.3, 0.08, metalMat(), -0.3, 0.65, 0));
+  mast.add(box(0.08, 1.3, 0.08, metalMat(), 0.3, 0.65, 0));
+  mast.add(box(0.7, 0.08, 0.08, metalMat(), 0, 1.25, 0));
 
+  // Horquillas bajas: se sitúan a 0,06 m y suben con liftHeight.
   const forks = new THREE.Group();
-  forks.position.set(0.35, 0.1, 0.1);
-  mast.add(forks);
-  const forkL = box(0.08, 0.07, 1.1, metalMat());
-  forkL.position.set(0.1, 0.035, 0.45);
-  forks.add(forkL);
-  const forkR = box(0.08, 0.07, 1.1, metalMat());
-  forkR.position.set(0.52, 0.035, 0.45);
-  forks.add(forkR);
+  forks.position.set(0, 0.06, 0.6);
+  g.add(forks);
+  forks.add(box(0.07, 0.05, 1.15, metalMat(), -0.25, 0.0, 0.55));
+  forks.add(box(0.07, 0.05, 1.15, metalMat(), 0.25, 0.0, 0.55));
+  forks.add(box(0.6, 0.05, 0.1, metalMat(), 0, 0.0, 0.05));
 
   const palletGrip = new THREE.Group();
-  palletGrip.position.set(0.35, 0.15, 0.85);
+  palletGrip.position.set(0, 0.04, 1.0);
   forks.add(palletGrip);
 
+  // Timón con empuñadura.
+  const tiller = box(0.05, 0.05, 0.55, metalMat(), 0.2, 0.75, -0.45);
+  tiller.rotation.x = -0.4;
+  g.add(tiller);
+
+  // Operario a pie, detrás del timón (lateral izquierdo).
+  const operator = createWorker();
+  operator.group.position.set(-0.3, 0.2, -0.45);
+  operator.group.scale.setScalar(0.8);
+  g.add(operator.group);
+
   const wheels: THREE.Object3D[] = [];
-  for (const [wx, wz] of [[-0.5, 0.65], [0.5, 0.65], [-0.5, -0.7], [0.5, -0.7]] as const) {
-    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.12, 12), lambert(DARK));
+  for (const [wx, wz] of [[-0.35, 0.5], [0.35, 0.5]] as const) {
+    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.08, 12), lambert(DARK));
     wheel.rotation.z = Math.PI / 2;
-    wheel.position.set(wx, 0.16, wz);
+    wheel.position.set(wx, 0.09, wz);
     g.add(wheel);
     wheels.push(wheel);
   }
+  // Rueda de tracción trasera (centrada).
+  const drive = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.1, 12), lambert(DARK));
+  drive.rotation.z = Math.PI / 2;
+  drive.position.set(0, 0.12, -0.55);
+  g.add(drive);
+  wheels.push(drive);
 
-  return { group: g, nodes: { forks, mast, wheels, body: chassis, palletGrip } };
+  return { group: g, nodes: { forks, mast, wheels, body: chassis, palletGrip, operator: operator.group } };
 }
 
 /** Recogepedidos: horquillas largas para 2 palets y torre con el operario de pie. */
@@ -169,12 +189,17 @@ export function createOrderPicker(): AnimatedMachine {
     wheels.push(wheel);
   }
 
-  return { group: g, nodes: { forks, mast, wheels, body: chassis, palletGrip } };
+  return { group: g, nodes: { forks, mast, wheels, body: chassis, palletGrip, operator: operator.group } };
 }
 
-/** Tractora + semirremolque de 13,6 m. `reefer` añade el equipo de frío en el frontal. */
+/**
+ * Tractora + semirremolque de 13,6 m. El semirremolque (caja y decoración) va en `trailerBody`,
+ * que sube `TRAILER_DOCK_LIFT` al atracar para que su piso quede a altura de andén.
+ */
 export function createTruck({ reefer }: { reefer?: boolean } = {}) {
   const g = group3();
+  const trailerBody = group3();
+  g.add(trailerBody);
 
   // Tractora
   const cab = box(2.2, 2.4, 1.8, lambert(0x0f7bb0), 0, 1.2, -6.2);
@@ -186,14 +211,16 @@ export function createTruck({ reefer }: { reefer?: boolean } = {}) {
   const deflector = box(2.2, 0.9, 0.4, lambert(0x8a95a8), 0, 2.9, -6.6);
   g.add(deflector);
 
-  // Chasis
+  // Chasis de la tractora.
   const chassis = box(2.3, 0.5, 4.5, lambert(0x2a3550), 0, 0.7, -3.4);
   g.add(chassis);
 
-  // Semirremolque 13,6 m
+  // Semirremolque 13,6 m (caja de fondo en su propio grupo, elevable).
   const trailer = box(2.55, 2.7, 13.6, lambert(reefer ? 0xe8eef4 : 0xdfe6ee));
   trailer.position.set(0, 1.9, 4.8);
-  g.add(trailer);
+  trailerBody.add(trailer);
+  // Larguero del semirremolque bajo la caja (une la caja con los ejes).
+  trailerBody.add(box(2.2, 0.25, 13.0, lambert(0x2a3550), 0, 0.45, 4.8));
 
   // Placa de marca en los laterales (logo ALDI Nord).
   const decalPw = 2.2;
@@ -202,11 +229,11 @@ export function createTruck({ reefer }: { reefer?: boolean } = {}) {
   const sideRight = createBrandDecal(decalPw, decalPh);
   sideRight.position.set(1.3, 2.0, decalZ);
   sideRight.rotation.y = Math.PI / 2;
-  g.add(sideRight);
+  trailerBody.add(sideRight);
   const sideLeft = createBrandDecal(decalPw, decalPh);
   sideLeft.position.set(-1.3, 2.0, decalZ);
   sideLeft.rotation.y = -Math.PI / 2;
-  g.add(sideLeft);
+  trailerBody.add(sideLeft);
   if (reefer) {
     const unit = box(2.2, 2.4, 0.9, lambert(0xb9c4d2), 0, 1.9, -2.7);
     g.add(unit);
@@ -216,12 +243,14 @@ export function createTruck({ reefer }: { reefer?: boolean } = {}) {
   const kingpin = box(0.4, 0.4, 0.4, lambert(0x2a3550), 0, 0.95, -0.8);
   g.add(kingpin);
 
-  // Ruedas
+  // Ruedas de la tractora y del semirremolque (las ruedas no suben: solo la caja).
+  const wheels: THREE.Object3D[] = [];
   for (const [wx, wz, r] of [[-1.05, -7.0, 0.4], [1.05, -7.0, 0.4], [-1.05, -4.0, 0.4], [1.05, -4.0, 0.4]] as const) {
     const wheel = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.35, 14), lambert(DARK));
     wheel.rotation.z = Math.PI / 2;
     wheel.position.set(wx, r, wz);
     g.add(wheel);
+    wheels.push(wheel);
   }
   for (let i = 0; i < 3; i++) {
     for (const s of [-1.05, 1.05]) {
@@ -229,10 +258,11 @@ export function createTruck({ reefer }: { reefer?: boolean } = {}) {
       wheel.rotation.z = Math.PI / 2;
       wheel.position.set(s, 0.3, 2.5 + i * 2.2);
       g.add(wheel);
+      wheels.push(wheel);
     }
   }
 
-  return { group: g, nodes: { trailer } };
+  return { group: g, nodes: { trailer, trailerBody, wheels } };
 }
 
 /** Persona tipo cápsula con chaleco reflectante. */
@@ -267,6 +297,7 @@ export function createPallet(height = 1.2, color = 0xa9875b) {
   pallet.position.y = height / 2;
   return pallet;
 }
+
 /** Transpaleta eléctrica con plataforma/asiento lateral (ESE): lleva pedidos preparados a los muelles. */
 export function createPalletTruck(): AnimatedMachine {
   const g = group3();

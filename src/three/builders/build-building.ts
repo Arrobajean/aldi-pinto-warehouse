@@ -18,6 +18,10 @@ export interface BuildingModel {
 
 const WALL_THICKNESS = 0.4;
 const ZONE_FLOOR_ALPHA = 1;
+/** Ancho dibujado de cada calle de pre-carga (los muelles están cada 4 m). */
+const LANE_DRAW_WIDTH = 2.2;
+/** Ancho de la marquesina de cada muelle (antes 3,2 m: casi tocaba la vecina). */
+const SHELTER_WIDTH = 2.8;
 
 function segmentsWithHoles(xMin: number, xMax: number, holes: { xMin: number; xMax: number }[], step = 0.25): { xMin: number; xMax: number }[] {
   const segs: { xMin: number; xMax: number }[] = [];
@@ -104,7 +108,9 @@ function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
   // polygonOffset: las marcas se pintan sobre el suelo sin z-fighting (parpadeo de texturas).
   const laneMat = lambert(0xf5c542, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   for (const dock of layout.docks) {
-    const lane = plane(dock.laneRect.xMax - dock.laneRect.xMin, dock.laneRect.zMax - dock.laneRect.zMin, laneMat, dock.x, 0.04, (dock.laneRect.zMin + dock.laneRect.zMax) / 2);
+    // Calle visual más estrecha que su rectángulo de simulación: deja hueco libre entre calles contiguas.
+    const laneW = Math.min(LANE_DRAW_WIDTH, dock.laneRect.xMax - dock.laneRect.xMin);
+    const lane = plane(laneW, dock.laneRect.zMax - dock.laneRect.zMin, laneMat, dock.x, 0.04, (dock.laneRect.zMin + dock.laneRect.zMax) / 2);
     lane.receiveShadow = false;
     lane.rotation.x = -Math.PI / 2;
     lane.userData.dockId = dock.id;
@@ -228,9 +234,9 @@ function buildDockFurniture(layout: WarehouseLayout): THREE.Group {
   for (const dock of layout.docks) {
     const cx = dock.x;
     // Abrigo (shelter) oscuro alrededor de la puerta, en el exterior.
-    const top = box(3.2, 0.25, 0.5, shelterMat, cx, 2.9, 80.25);
-    const sideL = box(0.25, 2.9, 0.5, shelterMat, cx - 1.6, 1.45, 80.25);
-    const sideR = box(0.25, 2.9, 0.5, shelterMat, cx + 1.6, 1.45, 80.25);
+    const top = box(SHELTER_WIDTH, 0.25, 0.5, shelterMat, cx, 2.9, 80.25);
+    const sideL = box(0.25, 2.9, 0.5, shelterMat, cx - SHELTER_WIDTH / 2 + 0.125, 1.45, 80.25);
+    const sideR = box(0.25, 2.9, 0.5, shelterMat, cx + SHELTER_WIDTH / 2 - 0.125, 1.45, 80.25);
     group.add(top, sideL, sideR);
 
     // Niveladora interior (rampa hacia Expedición).

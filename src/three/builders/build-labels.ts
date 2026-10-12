@@ -28,6 +28,28 @@ function makeTextTexture(text: string, opts: { font?: string; size?: number; col
   return tex;
 }
 
+/** Número de cada muelle (D01…D60) sobre su marquesina, legible desde la vista de la nave. */
+export function buildDockLabels(layout: WarehouseLayout): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'dock-labels';
+  for (const dock of layout.docks) {
+    const tex = makeTextTexture(dock.id, {
+      font: '700 72px JetBrains Mono, monospace',
+      size: 72,
+      color: '#ffffff',
+      bg: 'rgba(28,46,74,0.92)',
+      width: 256,
+      height: 96,
+    });
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    sprite.scale.set(3.2, 1.2, 1);
+    sprite.position.set(dock.x, 3.8, 81.6);
+    sprite.renderOrder = 3;
+    group.add(sprite);
+  }
+  return group;
+}
+
 function groundLabel(text: string, x: number, z: number, planeW: number, planeH: number, opts?: Parameters<typeof makeTextTexture>[1]): THREE.Mesh {
   const tex = makeTextTexture(text, { height: Math.round(planeH * 64), width: Math.round(planeW * 64), ...opts });
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });

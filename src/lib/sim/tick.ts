@@ -568,8 +568,9 @@ function spawnOutboundIfRoom(state: SimState) {
   if (state.trucks.length >= 34) return;
   const order = state.demand.orders[state.outOrdersSpawned];
   if (!order) return;
-  // Empieza a sacar camiones poco después del inicio del turno de noche.
-  if (state.ts < 4.2 * 3600) return;
+  // Salidas escalonadas: un camión cada 5 min desde las 06:30, no todos a la vez al empezar el turno.
+  const spawnAt = 6.5 * 3600 + state.outOrdersSpawned * 300;
+  if (state.ts < spawnAt) return;
   state.outOrdersSpawned++;
   const id = `TRK-${String(++state.seq.truck).padStart(3, '0')}`;
   const plate = PLATES[state.seq.truck % PLATES.length];

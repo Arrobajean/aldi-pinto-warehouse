@@ -34,8 +34,9 @@ Fuentes: alcabodelacalle.es/economia/aldi-amplia-su-centro-logistico-en-pinto/ �
 
 1. Parcela grande con viales y aparcamientos, **nave de ~40.000 m²**.
 2. 8 provincias (tabla de arriba).
-3. IA: **Google Gemini**, con la misma API key que Jean usa en su proyecto "RAG Atlas", y **Supabase** (pgvector + Edge Functions). La clave **nunca** va al navegador; vive en los secretos de Supabase. No leas `.env` de otros proyectos: Jean la configura con `supabase secrets set`.
+3. IA: **Google Gemini**, con la misma API key que Jean usa en su proyecto "RAG Atlas". Las llamadas a Gemini se hacen **en el servidor de Next.js** (route handlers). La clave **nunca** va al navegador. No leas `.env` de otros proyectos: Jean pone la clave en `.env.local` y en las variables de Vercel.
 4. "GPS" dentro de una nave = **localización de interior (RTLS por UWB/BLE)**. Se simula, con una interfaz preparada para conectar datos reales.
+5. **Stack: Next.js (App Router) + React 19 + Tailwind CSS v4 + Supabase + three.js**, en TypeScript. Despliegue previsto en Vercel (front + API) y Supabase (Postgres + pgvector, Auth, Realtime y Storage). El proyecto actual en Vite **se migra a Next.js en F0** (ver §2.5).
 
 ---
 
@@ -43,7 +44,7 @@ Fuentes: alcabodelacalle.es/economia/aldi-amplia-su-centro-logistico-en-pinto/ �
 
 Ruta: `C:\Users\jeanc\aldi-pinto-warehouse`. Git inicializado; commit de seguridad `3bab4b8` en `master` con el estado importado.
 
-- Stack instalado: Vite 8, React 19, three 0.186, TypeScript 6, lucide-react. Scripts: `dev` (puerto 3000), `build` (`tsc && vite build`).
+- Stack instalado: Vite 8, React 19, three 0.186, TypeScript 6, lucide-react. Scripts: `dev` (puerto 3000), `build` (`tsc && vite build`). **Vite se sustituye por Next.js en F0**; three, React, lucide-react y TypeScript se conservan.
 - **Roto:** `index.html` carga `/src/main.tsx`, que **no existe**. `src/main.ts`, `src/counter.ts`, `src/style.css` y `src/assets/*` son la plantilla de Vite: bórralos.
 - **Reutilizable con cambios:**
   - `src/three/SimsCameraController.ts`: la lógica de rotación, zoom y arrastre sirve, pero la escala está pensada para una escena de ±45 unidades (ver F1.4).
@@ -58,22 +59,27 @@ Ruta: `C:\Users\jeanc\aldi-pinto-warehouse`. Git inicializado; commit de segurid
 
 ### 2.1 Separación lógica / UI (preferencia permanente de Jean)
 
-Adaptado a Vite (no hay `app/api`; el servidor vive en Supabase):
+Estructura Next.js (App Router, carpeta `src/`):
 
 | Capa | Ubicación | Contiene | Prohibido |
 |---|---|---|---|
-| Tipos | `src/lib/types.ts` (+ `src/lib/layout/types.ts`, `src/lib/sim/types.ts`) | interfaces | lógica |
-| Lógica pura | `src/lib/**` | plano, simulación, rutas, stock, formato | React, three, fetch |
-| Cliente API | `src/lib/api.ts` | un `fetch` por endpoint con un helper `request<T>` | estado React |
+| Tipos | `src/lib/types.ts` (+ `src/lib/layout/types.ts`, `src/lib/sim/types.ts`, `src/lib/supabase/database.types.ts` generado) | interfaces compartidas entre cliente y servidor | lógica |
+| Lógica pura | `src/lib/**` (`layout/`, `sim/`, `rtls/`, `stock/`, `kpi/`, `replay/`, `scenarios/`) | plano, simulación, rutas, stock, formato | React, three, fetch |
+| Cliente API | `src/lib/api.ts` | un `fetch` por endpoint con un helper `request<T>` que lanza `Error(data.error)` | estado React, toasts |
+| Supabase | `src/lib/supabase/client.ts` (navegador), `src/lib/supabase/server.ts` (servidor, `@supabase/ssr`), `src/lib/supabase/admin.ts` (service role, **solo servidor**) | creación de clientes | lógica de negocio |
+| Servidor (dominio) | `src/lib/server/<dominio>.ts` (`gemini.ts`, `rag.ts`, `reports.ts`…), marcados con `import 'server-only'` | SDKs, Gemini, consultas a la BD | importarse desde el cliente |
+| Rutas API | `src/app/api/*/route.ts` | validan la entrada (zod) y delegan en `src/lib/server/*` | lógica duplicada entre rutas |
 | Render 3D | `src/three/**` | escena, builders, modelos, cámara, picking | React, reglas de negocio |
 | Hooks | `src/hooks/use-*.ts` | estado y efectos; devuelven `{ datos, flags, acciones }` | JSX |
-| UI | `src/components/<feature>/*.tsx` | presentación: recibe props y devuelve callbacks | fetch, reglas de negocio |
-| Contenedor | `src/components/<feature>.tsx`, `src/app.tsx` | compone hooks y piezas de UI | markup largo |
-| Servidor | `supabase/functions/*` | proxy del LLM, embeddings, BD | — |
+| UI | `src/components/<feature>/*.tsx` | presentación con Tailwind: recibe props y devuelve callbacks | fetch, reglas de negocio |
+| Contenedor | `src/components/<feature>.tsx` | compone hooks y piezas de UI | markup largo |
+| Páginas | `src/app/**/page.tsx`, `layout.tsx` | composición de contenedores; Server Components por defecto | lógica, three |
+| Base de datos | `supabase/migrations/*.sql`, `supabase/seed.sql` | esquema, RLS, funciones SQL | cambios hechos a mano en el panel sin migración |
 
 - Componentes de más de ~150 líneas o con más de una responsabilidad: dividir. Archivos en **kebab-case**.
 - La simulación (`src/lib/sim`) **no conoce three.js**. La escena lee el estado de la simulación cada frame (un snapshot) y actualiza matrices. Así el mismo estado alimenta la UI, la capa de localización y el RAG.
 - Carga inicial en `useEffect` con `.then()` y una bandera de cancelación.
+- Todo lo que toca three.js, `window` o Web Workers lleva `'use client'` y se carga con `next/dynamic(..., { ssr: false })`. Las páginas siguen siendo Server Components.
 
 ### 2.2 Unidades y coordenadas
 
@@ -83,7 +89,8 @@ Adaptado a Vite (no hay `app/api`; el servidor vive en Supabase):
 
 ### 2.3 Calidad
 
-- Al cerrar cada fase: `npx tsc --noEmit` limpio, `npm run build` OK y la app arranca con `npm run dev` sin errores en consola.
+- Al cerrar cada fase: `npx tsc --noEmit` y `npm run lint` limpios, `npm run build` (Next.js) OK y la app arranca con `npm run dev` sin errores en consola ni avisos de hidratación.
+- Toda migración de Supabase se aplica en local (`supabase db reset`) antes de hacer commit y se regeneran los tipos (`supabase gen types typescript`).
 - Rendimiento objetivo: **≥ 50 fps** en la vista general en un portátil medio. Todo lo repetido (estanterías, palets, plazas de aparcamiento, marcas) va en `InstancedMesh`. Nada de un `Mesh` por palet.
 - Git: rama por fase (`feat/fN-<nombre>`), commits pequeños y en español. Terminar con `Co-Authored-By` según la configuración del entorno. Nunca a `master` directo; PR o merge solo cuando Jean lo pida.
 
@@ -115,18 +122,90 @@ Prepáralos ya en el Turno 1, aunque todavía no se usen:
 
 ---
 
+## 2.5 Stack e implementación (Next.js + React + Tailwind + Supabase)
+
+### Next.js
+- Última versión estable de Next.js con **App Router**, React 19 y TypeScript estricto. Si la versión instalada cambia alguna convención (por ejemplo, `middleware.ts` → `proxy.ts`), sigue la documentación de esa versión.
+- Fuentes con `next/font/google`: Plus Jakarta Sans (UI) y JetBrains Mono (códigos). Se quitan los `<link>` de `index.html`.
+- Rutas previstas:
+
+| Ruta | Contenido | Fase |
+|---|---|---|
+| `/` | Gemelo digital 3D (visor + paneles) | F1 |
+| `/red` | Mapa exterior de rutas a tiendas | F11 |
+| `/escenarios` | Biblioteca y resultados de "¿qué pasa si…?" | F13 |
+| `/informes` | Informes de turno y PRL | F10, F14 |
+| `/login` | Acceso con Supabase Auth | F15 |
+| `/api/chat` | Asistente Gemini + RAG + herramientas | F5 |
+| `/api/ingest` | Ingesta de la base de conocimiento (protegida) | F5 |
+| `/api/shift-report` | Informe de turno con Gemini | F14 |
+| `/api/weather` | Proxy y caché del clima de Pinto | F8 |
+
+- Las rutas API se ejecutan en el runtime de Node.js (no Edge) salvo que haya un motivo claro. Las respuestas del chat se pueden enviar en streaming.
+- Web Workers (F12, F13): `new Worker(new URL('../workers/sim-worker.ts', import.meta.url))` dentro de un componente cliente.
+- `next.config.ts`: `transpilePackages` si alguna dependencia de three lo necesita. Las imágenes y texturas van en `public/`.
+
+### Tailwind CSS v4
+- Instalación v4 con PostCSS (`@tailwindcss/postcss`). En `src/app/globals.css`: `@import "tailwindcss";` y un bloque `@theme` con los tokens de §5 (colores, fuentes, radios, sombras), para escribir clases como `bg-panel`, `text-muted` o `border-line`.
+- Modo oscuro por defecto y paneles con `backdrop-blur` sobre el canvas.
+- Componentes base propios en `src/components/ui/` (botón, panel, chip, pestañas, deslizador, hoja inferior). Para piezas complejas como diálogos o menús, se puede usar **shadcn/ui** (encaja con Tailwind v4); no hace falta añadir más librerías de UI.
+- Utilidad `cn()` (clsx + tailwind-merge) en `src/lib/cn.ts`.
+
+### Supabase
+- Proyecto: el que decida Jean (§6). Si se comparte con RAG Atlas, **todo** va en el esquema `aldi_pinto` y se expone en la API de Supabase.
+- CLI de Supabase en el repo: `supabase init`, desarrollo local con `supabase start` (Docker) y migraciones versionadas en `supabase/migrations`.
+- Paquetes: `@supabase/supabase-js` y `@supabase/ssr` (sesión por cookies en Server Components y route handlers).
+- Variables de entorno (`.env.local`, con un `.env.example` sin valores en el repo):
+
+| Variable | Dónde se usa | Pública |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | cliente y servidor | sí |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` (o la clave publicable) | cliente y servidor | sí |
+| `SUPABASE_SERVICE_ROLE_KEY` | solo `src/lib/supabase/admin.ts` | **no** |
+| `GEMINI_API_KEY` | solo `src/lib/server/gemini.ts` | **no** |
+| `GEMINI_CHAT_MODEL`, `GEMINI_EMBED_MODEL`, `EMBED_DIM` | servidor | no |
+| `INGEST_SECRET` | protege `/api/ingest` | no |
+
+- **RLS activada en todas las tablas** desde su creación. La lectura anónima solo se permite donde tenga sentido (por ejemplo, la base de conocimiento pública vía RPC).
+- Tablas por fase (cada una en su propia migración):
+
+| Tabla / recurso | Fase | Uso |
+|---|---|---|
+| extensión `vector`, `kb_chunks`, función `match_kb_chunks` | F5 | RAG |
+| `chat_usage` | F5 | límite de uso por sesión o IP |
+| bucket `replays` + tabla `replays` | F7 | jornadas guardadas |
+| `incidents` | F10 | PRL |
+| `scenarios`, `scenario_runs` | F13 | escenarios y resultados |
+| `shift_reports` | F14 | informes |
+| `profiles` (rol), `comments` | F15 | multiusuario |
+| canal Realtime `sim:<sala>` | F15 | difusión del estado |
+| `integrations`, `rtls_calibration` | F16 | conectores |
+
+- La simulación **no** escribe cada tick en la base de datos: vive en el cliente (y en F15 se difunde por Realtime). Solo se guardan resultados, eventos agregados, informes y configuración.
+
+### Migración de Vite a Next.js (se hace en F0)
+1. `npm i next@latest react@latest react-dom@latest` y `npm i -D tailwindcss @tailwindcss/postcss postcss eslint eslint-config-next`. Desinstalar `vite` y `@vitejs/plugin-react`.
+2. Borrar `vite.config.ts` e `index.html`. Crear `next.config.ts`, `postcss.config.mjs`, `src/app/layout.tsx`, `src/app/page.tsx` y `src/app/globals.css`.
+3. Ajustar `tsconfig.json` al de Next.js (plugin `next`, `jsx: preserve`, alias `@/*` → `src/*`, `include` con `next-env.d.ts` y `.next/types`). Mantener `strict`.
+4. Scripts: `dev` (`next dev -p 3000`), `build` (`next build`), `start`, `lint`.
+5. `.gitignore`: añadir `.next/`, `.env*.local`, `supabase/.temp`.
+
+---
+
 ## 3. Fases — Turno 1
 
 ### F0 — Base funcional (rama `feat/f0-f1-plano`, ya creada)
 
 1. Borrar `src/main.ts`, `src/counter.ts`, `src/style.css`, `src/assets/`, `public/icons.svg`.
-2. Crear `src/main.tsx` (monta `<App/>` en `#root`), `src/app.tsx` y `src/styles.css` con tokens CSS (ver §5).
-3. Mover tipos a `src/lib/types.ts`:
+2. **Migrar a Next.js + Tailwind v4** siguiendo los pasos de §2.5. `src/app/page.tsx` monta el contenedor `src/components/warehouse-app.tsx` (cliente).
+3. **Base de Supabase:** `supabase init`, `.env.example`, los clientes de `src/lib/supabase/{client,server,admin}.ts` y una migración inicial vacía con el esquema `aldi_pinto` (y `alter default privileges` para que la API lo exponga). Sin tablas todavía.
+4. Mover tipos a `src/lib/types.ts`:
    - `Province = 'Madrid'|'Toledo'|'Segovia'|'Ávila'|'Guadalajara'|'Ciudad Real'|'Cáceres'|'Salamanca'`.
    - `ZoneId = 'seco'|'frio'|'congelado'|'fyv'|'expedicion'|'carga_baterias'`.
-4. Mover `warehouseData.ts` a `src/lib/data/stores.ts`. Conservar las tiendas existentes y añadir tiendas simuladas para Guadalajara (~8), Ciudad Real (~8), Cáceres (~6) y Salamanca (~8) con pueblos reales y nombres genéricos (`ALDI <Pueblo>`). Quitar los datos de muelles y agentes antiguos (se generan en F1/F2).
-5. Arreglar los imports `import type`.
-6. **Aceptación:** `npm run dev` muestra una pantalla oscura con la barra superior y un canvas vacío; `tsc` limpio.
+5. Mover `warehouseData.ts` a `src/lib/data/stores.ts`. Conservar las tiendas existentes y añadir tiendas simuladas para Guadalajara (~8), Ciudad Real (~8), Cáceres (~6) y Salamanca (~8) con pueblos reales y nombres genéricos (`ALDI <Pueblo>`). Quitar los datos de muelles y agentes antiguos (se generan en F1/F2).
+6. Arreglar los imports `import type` y usar el alias `@/`.
+7. Ficha `README.md`: requisitos, `npm i`, `.env.local`, `supabase start`, `npm run dev`, y el aviso de datos simulados.
+8. **Aceptación:** `npm run dev` muestra una pantalla oscura (Tailwind) con la barra superior y un canvas vacío. `tsc`, `lint` y `next build` limpios. `supabase start` y `supabase db reset` funcionan en local.
 
 ### F1 — El plano del almacén en 3D
 
@@ -215,12 +294,13 @@ No se dibuja la cubierta. Opcional: con zoom lejano, una cubierta translúcida c
 
 #### F1.5 UI
 
-- `src/components/viewport.tsx`: monta y desmonta `WarehouseScene` (`src/three/warehouse-scene.ts`). El renderer, el bucle, el resize y el raycast viven en la clase. React solo recibe callbacks: `onHoverZone`, `onSelect`.
+- `src/components/viewport.tsx` (`'use client'`, cargado con `next/dynamic` y `ssr: false`): monta y desmonta `WarehouseScene` (`src/three/warehouse-scene.ts`). El renderer, el bucle, el resize y el raycast viven en la clase. React solo recibe callbacks: `onHoverZone`, `onSelect`.
 - Barra superior: marca, "Plataforma Logística Pinto", indicadores (nave de 40.000 m², nº de ubicaciones, 60 muelles) y un reloj.
 - Panel lateral: **Zonas** (al pulsar, la cámara enfoca) y **Capas** (estanterías, palets, rótulos, máquinas, camiones, exterior, sombras).
 - Botonera de cámara abajo a la derecha: rotar ⟲/⟳, zoom 1/2/3, muros y reiniciar.
 - Ficha de zona al hacer clic: superficie, temperatura objetivo, ubicaciones, ocupación y pasillos.
-- **Responsive:** por debajo de 768 px el panel lateral pasa a ser una hoja inferior deslizable y la botonera se compacta.
+- Toda la UI con clases de Tailwind y los tokens de `@theme`; nada de CSS suelto salvo `globals.css`.
+- **Responsive:** por debajo de 768 px (`md:`) el panel lateral pasa a ser una hoja inferior deslizable y la botonera se compacta.
 - Hook `use-warehouse-scene.ts`: expone `{ selectedZone, layers, wallMode, zoomLevel, acciones }`.
 
 #### F1.6 Aceptación F1
@@ -282,10 +362,11 @@ Todo en `src/lib/sim/` (lógica pura, determinista con semilla).
 
 **Proveedor: Google Gemini.** Antes de empezar, confirma con Jean los nombres exactos de los modelos de chat y embeddings que usa en RAG Atlas. Si no los sabe, consulta la documentación actual de Gemini y elige el modelo "flash" vigente para el chat y el modelo de embeddings vigente. No leas `.env` de otros proyectos.
 
-1. **Servidor:** Supabase.
-   - Tabla `kb_chunks` con `pgvector` (`id, title, category, content, source_url, embedding vector(N)`). `N` es la dimensión del modelo de embeddings: debe coincidir con `EMBED_DIM`. Índice HNSW y una función SQL `match_kb_chunks(query_embedding, match_count, min_similarity)`.
-   - Secretos (`supabase secrets set`): `GEMINI_API_KEY`, `GEMINI_CHAT_MODEL`, `GEMINI_EMBED_MODEL`, `EMBED_DIM`. Ningún nombre de modelo va escrito en el código.
-   - Edge Function `chat` (Deno):
+1. **Servidor:** route handlers de Next.js + Supabase (Postgres con pgvector).
+   - Migración: extensión `vector` y tabla `aldi_pinto.kb_chunks` con `pgvector` (`id, title, category, content, source_url, embedding vector(N)`). `N` es la dimensión del modelo de embeddings: debe coincidir con `EMBED_DIM`. Índice HNSW y una función SQL `match_kb_chunks(query_embedding, match_count, min_similarity)`.
+   - Variables de entorno de servidor (`.env.local` y Vercel): `GEMINI_API_KEY`, `GEMINI_CHAT_MODEL`, `GEMINI_EMBED_MODEL`, `EMBED_DIM`. Ningún nombre de modelo va escrito en el código.
+   - `src/lib/server/gemini.ts` (cliente de Gemini: embeddings, generación y bucle de herramientas) y `src/lib/server/rag.ts` (recuperación vía `supabase.rpc('match_kb_chunks')`).
+   - `src/app/api/chat/route.ts` (valida con zod y delega):
      1. valida la entrada;
      2. crea el embedding de la pregunta (`taskType: RETRIEVAL_QUERY`);
      3. recupera los top-k con `match_kb_chunks`;
@@ -293,9 +374,9 @@ Todo en `src/lib/sim/` (lógica pura, determinista con semilla).
      5. ejecuta el bucle de **function calling**: cuando la respuesta trae `functionCall`, resuelve la herramienta contra el snapshot que envió el cliente, devuelve un `functionResponse` y vuelve a llamar, con un máximo de 5 vueltas;
      6. responde `{ answer, sources, ui_actions }`.
    - La clave va en la cabecera `x-goog-api-key`, **nunca en la URL**. Llamadas con `fetch` directo a la API REST de Gemini o con el SDK oficial de Google para JS. Temperatura baja (0,2).
-   - Edge Function `ingest`: trocea `kb/*.md` (~500–800 tokens con solapamiento), crea embeddings en lote (`taskType: RETRIEVAL_DOCUMENT`) y hace upsert por hash del contenido.
-   - Límite de uso: contador por IP o sesión en una tabla, para no quemar la cuota de la key compartida con RAG Atlas.
-   - Usa un **esquema propio** (`aldi_pinto`) si se comparte el proyecto de Supabase con RAG Atlas.
+   - `src/app/api/ingest/route.ts`, protegida con `INGEST_SECRET` (o el script `scripts/ingest.ts` que llama a la misma lógica): trocea `kb/*.md` (~500–800 tokens con solapamiento), crea embeddings en lote (`taskType: RETRIEVAL_DOCUMENT`) y hace upsert por hash del contenido.
+   - Límite de uso: contador por IP o sesión en `aldi_pinto.chat_usage`, escrito con el cliente admin, para no quemar la cuota de la key compartida con RAG Atlas.
+   - Todo en el esquema `aldi_pinto` (ver §2.5).
 2. **Base de conocimiento:** migrar `ragKnowledgeBase.ts` a markdown en `kb/*.md` (procedimientos, PRL, cadena de frío, muelles, maquinaria, tiendas, datos públicos de Pinto con fuente). Script de ingesta.
 3. **Herramientas sobre el estado en vivo:** la parte diferencial. El cliente envía un snapshot compacto o la función lo pide.
    - `get_machine(id)`, `find_machines(filter)`
@@ -304,14 +385,18 @@ Todo en `src/lib/sim/` (lógica pura, determinista con semilla).
    - `get_alerts(since)`, `get_kpis()`
 4. **Acciones en la UI:** el asistente puede devolver `ui_actions` (`focus_entity`, `focus_location`, `highlight_zone`, `open_card`). Por ejemplo: "¿Dónde está la R-07?" → responde y la cámara vuela hasta ella.
 5. Cliente: `src/lib/api.ts` (`postChat`), `src/hooks/use-assistant.ts` y `src/components/assistant/*` (panel de chat con fuentes plegables).
-6. **Eliminar** la llamada directa a Gemini desde el navegador en `ragEngine.ts` (ahora pasa por la Edge Function). Conservar la búsqueda local por palabras clave como plan B si no hay conexión.
-7. **Aceptación:** 10 preguntas de prueba (mitad documentales, mitad sobre el estado en vivo) responden bien y citan fuentes. Ninguna clave aparece en el bundle (`grep` sobre `dist/`).
+6. **Eliminar** la llamada directa a Gemini desde el navegador en `ragEngine.ts` (ahora pasa por `/api/chat`). Conservar la búsqueda local por palabras clave como plan B si no hay conexión.
+7. **Aceptación:** 10 preguntas de prueba (mitad documentales, mitad sobre el estado en vivo) responden bien y citan fuentes. Ninguna clave aparece en el bundle del cliente (`grep` de `GEMINI` y de la service role sobre `.next/static`).
 
 ---
 
 ## 4. Fases — Turno 2 (ampliaciones)
 
-Cada fase va en su rama `feat/fN-<nombre>`, con la misma disciplina que el Turno 1: lógica pura en `src/lib/**`, hooks, componentes, `tsc` limpio y fps ≥ 50.
+Cada fase va en su rama `feat/fN-<nombre>`, con la misma disciplina que el Turno 1:
+- lógica pura en `src/lib/**`, hooks y componentes con Tailwind;
+- servidor en `src/app/api/*` + `src/lib/server/*`;
+- tablas nuevas con su migración de Supabase y RLS;
+- `tsc`, `lint` y `next build` limpios, y fps ≥ 50.
 
 ### F6 — Panel de indicadores (rama `feat/f6-indicadores`)
 
@@ -330,7 +415,7 @@ Cada fase va en su rama `feat/fN-<nombre>`, con la misma disciplina que el Turno
 ### F7 — Repetición del día (rama `feat/f7-repeticion`)
 
 1. `src/lib/replay/`: snapshots del `SimState` cada 30 s simulados + **log de eventos** completo. Reconstruir el estado de cualquier instante t = snapshot anterior + reaplicar los eventos hasta t, o re-simular con la misma semilla.
-2. Persistencia: en IndexedDB en local; opcionalmente en Supabase Storage para compartir una jornada.
+2. Persistencia: en IndexedDB en local. Para compartir una jornada, se guarda comprimida en el bucket `replays` de Supabase Storage, con sus metadatos en la tabla `aldi_pinto.replays` (RLS: la ve quien la creó y los roles con permiso en F15).
 3. UI: línea de tiempo bajo el canvas, con marcas de eventos (alertas en rojo, llegadas de camión en azul…), y controles para reproducir, pausar, ir a una hora y cambiar la velocidad. Mientras se reproduce se muestra un aviso visible de **"Modo repetición"** y la simulación en vivo sigue corriendo en segundo plano.
 4. Clic en una alerta del feed → salta a ese momento con la cámara en la posición del suceso.
 5. Integración con F5: herramienta `get_state_at(time)` para que el asistente responda "¿qué pasó en el muelle 12 a las 7:40?".
@@ -342,7 +427,7 @@ Cada fase va en su rama `feat/fN-<nombre>`, con la misma disciplina que el Turno
 2. De noche: luces de la nave (LED) y farolas del patio encendidas, faros de camión y balizas naranjas en las máquinas. La iluminación interior es uniforme, porque es una nave.
 3. Clima simulado o real:
    - simulado: perfil diario aleatorio con semilla;
-   - real, opcional: temperatura y precipitación de Pinto de una API abierta sin clave (por ejemplo Open-Meteo), llamada desde `src/lib/api.ts`.
+   - real, opcional: temperatura y precipitación de Pinto de una API abierta sin clave (por ejemplo Open-Meteo). El cliente llama a `/api/weather` (route handler con caché de 15 min, `revalidate`) desde `src/lib/api.ts`.
    - Lluvia (partículas instanced en el exterior), suelo mojado (más brillo en el asfalto) y niebla en invierno.
 4. El clima afecta a la simulación: con lluvia, los camiones van más lentos en el patio, y con calor exterior aumenta la carga térmica de las cámaras (se conecta con F9).
 5. Ajuste de calidad: el ambiente se puede desactivar.
@@ -366,7 +451,7 @@ Cada fase va en su rama `feat/fN-<nombre>`, con la misma disciplina que el Turno
 
 ### F10 — Seguridad / PRL (rama `feat/f10-prl`)
 
-1. Construido sobre las geocercas de F3. Los incidentes de proximidad entre máquina y peatón, los excesos de velocidad y los tiempos de exposición en congelado se registran como **incidentes** con una gravedad.
+1. Construido sobre las geocercas de F3. Los incidentes de proximidad entre máquina y peatón, los excesos de velocidad y los tiempos de exposición en congelado se registran como **incidentes** con una gravedad. Se guardan agregados en `aldi_pinto.incidents` (sin datos personales reales) y se listan en la página `/informes`.
 2. **Mapa de puntos negros:** agregación espacial de incidentes y casi-accidentes en celdas de 2 m, pintada en el suelo. Se puede filtrar por tipo, turno y rango de fechas.
 3. **Repetición de incidente:** desde la ficha de un incidente, abre F7 en ese instante, con la cámara encuadrada y los dos implicados resaltados.
 4. Sugerencias automáticas por reglas: cruces con mucho tráfico → propone un espejo o un paso peatonal; pasillo con excesos de velocidad repetidos → propone limitar la velocidad.
@@ -375,7 +460,7 @@ Cada fase va en su rama `feat/fN-<nombre>`, con la misma disciplina que el Turno
 
 ### F11 — Mapa exterior de rutas (rama `feat/f11-rutas`)
 
-1. Vista nueva "Red": el zoom sale de la parcela y pasa a un mapa de la zona centro con las 8 provincias. Transición animada entre vistas.
+1. Página `/red` (y acceso desde el visor): el zoom sale de la parcela y pasa a un mapa de la zona centro con las 8 provincias. Transición animada entre vistas.
 2. Mapa: MapLibre GL con teselas vectoriales libres (OpenFreeMap u otra fuente sin clave; revisa los términos de uso) o, como alternativa, un mapa 2D estilizado con las provincias en GeoJSON y las autovías principales (A-4, A-42, A-6, AP-6, A-2, A-5, A-3).
 3. Coordenadas de las tiendas: geolocalizar los municipios de `stores.ts` con su centroide aproximado (tabla estática en `src/lib/data/towns.ts`). Indicar que las ubicaciones son aproximadas.
 4. Rutas: polilíneas por carretera mediante una tabla precalculada por destino (OSRM público solo en desarrollo, y guardando el resultado), o líneas rectas con un factor de rodeo si no hay rutas.
@@ -407,7 +492,7 @@ Cada fase va en su rama `feat/fN-<nombre>`, con la misma disciplina que el Turno
    - ausencias de operarios en un turno,
    - avería del compresor de una cámara (se conecta con F9),
    - corte de luz (cargadores parados) y nevada en Guadarrama (rutas a Segovia más lentas, se conecta con F11).
-2. Biblioteca de escenarios predefinidos, más un editor sencillo en la UI (formulario por tipo de evento) con guardado en local o en Supabase.
+2. Biblioteca de escenarios predefinidos, más un editor sencillo en la UI (formulario por tipo de evento) con guardado en `aldi_pinto.scenarios` (y los resultados en `scenario_runs`), en la página `/escenarios`. Formularios con validación zod compartida entre cliente y servidor.
 3. Ejecución en un **Web Worker** a máxima velocidad, sin dibujar: simula el resto del día en segundos y compara con la línea base (sin el escenario) en los indicadores de F6.
 4. Resultado: informe "impacto del escenario", con gráficas comparadas, tiendas que no llegan a las 08:30, horas extra necesarias y cuellos de botella detectados (el muelle o pasillo con más espera).
 5. RAG (F5): herramienta `run_scenario(spec)`, para que el jefe pueda preguntar "¿qué pasa si mañana fallan 2 retráctiles en el turno de mañana?" y el asistente lance el escenario y explique el resultado.
@@ -416,14 +501,20 @@ Cada fase va en su rama `feat/fN-<nombre>`, con la misma disciplina que el Turno
 ### F14 — Informe automático de turno (rama `feat/f14-informe-turno`)
 
 1. Al cerrar cada turno (evento de F2), se genera un resumen estructurado (JSON): indicadores de F6, incidencias y alertas, camiones fuera de horario, PRL de F10, frío y energía de F9, y tareas pendientes que pasan al siguiente turno.
-2. Edge Function `shift-report`: recibe el JSON y le pide a **Gemini** que redacte un informe ejecutivo en español (markdown) con este orden: resumen, indicadores, incidencias, acciones recomendadas y pendientes. No debe inventar cifras: solo puede usar las del JSON (indícalo en el `systemInstruction`).
-3. Se guarda en la tabla `shift_reports` de Supabase. UI: lista de informes, vista, exportar a PDF (impresión) y copiar al portapapeles.
+2. `src/app/api/shift-report/route.ts` → `src/lib/server/reports.ts`: recibe el JSON y le pide a **Gemini** que redacte un informe ejecutivo en español (markdown) con este orden: resumen, indicadores, incidencias, acciones recomendadas y pendientes. No debe inventar cifras: solo puede usar las del JSON (indícalo en el `systemInstruction`).
+3. Se guarda en `aldi_pinto.shift_reports`. UI en `/informes`: lista de informes, vista, exportar a PDF (impresión) y copiar al portapapeles.
 4. Se puede pedir un informe en cualquier momento ("informe de lo que llevamos de turno").
 5. **Aceptación:** cada cifra del informe se puede encontrar en el JSON de entrada (test que extrae los números del markdown y los busca).
 
 ### F15 — Multiusuario (rama `feat/f15-multiusuario`)
 
-1. Supabase Auth (email mágico) y roles en una tabla `profiles`: `jefe_almacen`, `jefe_muelles`, `prl`, `lectura`.
+1. Supabase Auth (enlace mágico por email) con `@supabase/ssr`:
+   - página `/login`;
+   - refresco de sesión en el middleware (o `proxy.ts`, según la versión de Next.js);
+   - protección de rutas en el servidor;
+   - roles en `aldi_pinto.profiles`: `jefe_almacen`, `jefe_muelles`, `prl`, `lectura`, con un trigger que crea el perfil al registrarse.
+
+   Hasta F15, la app funciona sin login (modo demo).
 2. **Simulación autoritativa única:**
    - Opción A: un cliente "anfitrión" ejecuta la simulación y difunde snapshots y eventos por **Supabase Realtime** (canal broadcast); los demás interpolan.
    - Opción B: la simulación en un proceso de servidor.
@@ -452,7 +543,7 @@ Objetivo: dejar el producto listo para conectarlo a datos reales **sin cambiar l
 
 ## 5. Guía visual de la UI
 
-- Tema oscuro por defecto, con tokens en `:root`: fondo `#0b1220`, paneles `#111a2e` con transparencia y desenfoque, borde `#22304d`, texto `#e6ecf5`, texto secundario `#93a3bf`, acento azul `#22a6e0`, acento naranja `#f39200`, ok `#2ecc71`, aviso `#f5b301`, error `#ff5d5d`.
+- Los tokens se definen en el bloque `@theme` de Tailwind v4 (`src/app/globals.css`) y se usan como clases (`bg-panel`, `text-muted`…). Tema oscuro por defecto: fondo `#0b1220`, paneles `#111a2e` con transparencia y desenfoque, borde `#22304d`, texto `#e6ecf5`, texto secundario `#93a3bf`, acento azul `#22a6e0`, acento naranja `#f39200`, ok `#2ecc71`, aviso `#f5b301`, error `#ff5d5d`.
 - Colores de zona coherentes en la UI y en el 3D: seco `#c9ced6`, frío `#7cc4f0`, congelado `#b9e3ff`, FyV `#8fd694`, expedición `#f5d06b`.
 - Tipografía: Plus Jakarta Sans (UI) y JetBrains Mono (códigos, matrículas, horas); ya están enlazadas en `index.html`.
 - Iconos: `lucide-react`.
@@ -462,5 +553,5 @@ Objetivo: dejar el producto listo para conectarlo a datos reales **sin cambiar l
 
 1. Nombres exactos de los modelos de Gemini (chat y embeddings) que usa en RAG Atlas → se necesita en F5.
 2. ¿Proyecto de Supabase nuevo o el de RAG Atlas con el esquema `aldi_pinto`?
-3. ¿Despliegue? (Vercel para el front + Supabase para las funciones es lo natural).
+3. Confirmar el despliegue en Vercel (Next.js) + Supabase, y quién crea los proyectos y las variables de entorno.
 4. ¿Turnos de trabajo reales del almacén? F2 asume mañana, tarde y noche: ajustar si son dos.

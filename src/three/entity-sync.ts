@@ -90,8 +90,8 @@ export class EntitySync {
     for (const t of state.trucks) {
       const ref = this.getTruck(t.id, t.temp !== 'dry');
       ref.group.position.set(t.pos.x, 0, t.pos.z);
-      // Dirección: los camiones avanzan con la tractora hacia +X en el modelo.
-      ref.group.rotation.y = 0;
+      // Rumbo calculado por la simulación (la tractora mira a −Z en el modelo).
+      ref.group.rotation.y = t.heading ?? 0;
     }
 
     // Palets sueltos (cargados en máquinas, calles de pre-carga).

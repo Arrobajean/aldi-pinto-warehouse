@@ -66,6 +66,8 @@ function moveAlong(state: SimState, deps: SimDeps, m: Machine, dt: number): bool
   const dx = target.x - m.pos.x;
   const dz = target.z - m.pos.z;
   const dist = Math.hypot(dx, dz);
+  // Las máquinas miran a +Z con rotación 0: el rumbo sale de la dirección de avance.
+  if (dist > 1e-6) m.heading = Math.atan2(dx, dz);
   if (dist <= step) {
     m.pos.x = target.x;
     m.pos.z = target.z;
@@ -84,7 +86,6 @@ function moveAlong(state: SimState, deps: SimDeps, m: Machine, dt: number): bool
     m.pos.x += dx * f;
     m.pos.z += dz * f;
   }
-  m.heading = Math.atan2(m.pos.x - (m.route[0]?.x ?? target.x), m.pos.z - (m.route[0]?.z ?? target.z));
   m.speed = step / dt;
 
   // Reservar el pasillo del siguiente objetivo.
@@ -111,7 +112,10 @@ function beginTask(state: SimState, deps: SimDeps, m: Machine, task: SimTask) {
       .map((pid) => state.paletById[pid])
       .filter((p): p is Pallet => Boolean(p))
       .map((p) => p.pos);
-    m.route = [...deps.indoor.pointsFor(deps.indoor.find(m.pos, deps.indoor.nearestTo(stops[0]))), ...stops.slice(1), ...deps.indoor.pointsFor(deps.indoor.find(stops[stops.length - 1], deps.indoor.nearestTo(task.to)))];
+    // Si los palets del lote ya no existen (p. ej. retirados), la ruta va directa al destino.
+    const first = stops[0] ?? task.to;
+    const last = stops[stops.length - 1] ?? task.to;
+    m.route = [...deps.indoor.pointsFor(deps.indoor.find(m.pos, deps.indoor.nearestTo(first))), ...stops.slice(1), ...deps.indoor.pointsFor(deps.indoor.find(last, deps.indoor.nearestTo(task.to)))];
     m.hasPalet = true;
   }
 }
@@ -206,7 +210,16 @@ function completeTask(state: SimState, deps: SimDeps, m: Machine, task: SimTask)
   m.route = [];
 }
 
+/** Libera el pasillo reservado. Sin esto, una máquina parada en un pasillo bloquea a las demás. */
+function releaseAisle(state: SimState, m: Machine) {
+  if (m.aisleReserved && state.aisleLocks[m.aisleReserved] === m.id) delete state.aisleLocks[m.aisleReserved];
+  m.aisleReserved = null;
+}
+
 function updateMachine(state: SimState, deps: SimDeps, m: Machine, dt: number) {
+  // Solo se mantiene la reserva mientras la máquina se desplaza.
+  if (m.status !== 'traveling' && m.status !== 'waiting') releaseAisle(state, m);
+
   // Batería y recarga.
   if (m.status === 'charging') {
     m.battery = Math.min(100, m.battery + dt * 0.8);
@@ -271,6 +284,8 @@ function moveTruck(_state: SimState, _deps: SimDeps, t: Truck, dt: number): bool
   const dx = target.x - t.pos.x;
   const dz = target.z - t.pos.z;
   const dist = Math.hypot(dx, dz);
+  // La tractora mira a −Z con rotación 0: el frente apunta a la dirección de avance.
+  if (dist > 1e-6) t.heading = Math.atan2(-dx, -dz);
   if (dist <= step) {
     t.pos.x = target.x;
     t.pos.z = target.z;
@@ -513,6 +528,9 @@ function updateTruck(state: SimState, deps: SimDeps, t: Truck, dt: number) {
           state.stats.trucksOut++;
           state.stats.shipped += t.paletsLoaded;
           if (t.orderId) state.outboundDone.push(t.orderId);
+          // Los palets expedidos salen de la nave: se retiran para no acumular memoria.
+          retireShippedPalets(state, t.cargoPaletIds);
+          t.cargoPaletIds = [];
         }
         t.status = 'done';
       }
@@ -542,6 +560,15 @@ function finishTruck(state: SimState, deps: SimDeps, t: Truck) {
     ...deps.yard.pointsFor(deps.yard.find(start, 'park-e')),
     ...deps.yard.pointsFor(deps.yard.find({ x: 150, z: 105 }, 'exit')),
   ];
+}
+
+/** Elimina de la simulación los palets que acaban de salir en un camión. */
+function retireShippedPalets(state: SimState, ids: string[]) {
+  if (ids.length === 0) return;
+  const gone = new Set(ids);
+  for (const pid of ids) delete state.paletById[pid];
+  state.pallets = state.pallets.filter((p) => !gone.has(p.id));
+  if (state.outboundDone.length > 500) state.outboundDone.splice(0, state.outboundDone.length - 500);
 }
 
 /** Genera pedidos (pick), reposiciones y putaway usando los índices incrementales. */

@@ -45,6 +45,8 @@ export interface Truck {
   /** Puntos de ruta en metros. */
   route: Point[];
   speed: number;
+  /** Rumbo en radianes (la tractora mira a −Z con rotación 0). */
+  heading?: number;
   /** 0..1 de avance de descarga/carga en el muelle. */
   progress: number;
   cargoPaletIds: string[];

@@ -108,7 +108,7 @@ export function articleForSku(sku: string | undefined): StockArticle {
   // Genera uno determinista a partir del SKU.
   const num = Number(sku?.replace(/\D+/g, '') ?? 0) || 1000;
   const rng = mulberry(num + 31);
-  const family = FAMILIES[rng() * FAMILIES.length];
+  const family = FAMILIES[Math.floor(rng() * FAMILIES.length)];
   const roll = rng();
   return {
     sku: sku ?? `SKU-${num}`,

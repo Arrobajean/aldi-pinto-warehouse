@@ -7,6 +7,7 @@ import { SimsCamera, type SimsZoomLevel } from '@/three/sims-camera';
 import { applyWallMode, updateWalls, type WallMode } from '@/three/wall-modes';
 import { EntitySync } from '@/three/entity-sync';
 import { RtlsLayers } from '@/three/rtls-layers';
+import { createBrandDecal, loadBranding } from '@/three/branding';
 import type { SmoothedTrack } from '@/lib/rtls/types';
 import { buildBuilding, type WallMesh } from '@/three/builders/build-building';
 import { buildSite } from '@/three/builders/build-site';
@@ -205,7 +206,13 @@ export class WarehouseScene {
     this.groups.set('machines', machinesGroup);
     this.groups.set('trucks', trucksGroup);
 
+    // Placa de marca en la fachada sur (sobre los muelles).
+    const facadeLogo = createBrandDecal(3.8, 4.0);
+    facadeLogo.position.set(0, 6.8, layout.building.rect.zMax + 0.42);
+    this.scene.add(facadeLogo);
+
     applyWallMode(this.walls, this.wallMode, this.camera.getAngleIndex());
+    void loadBranding();
   }
 
   // --- Capas ---

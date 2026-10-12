@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { box, lambert, group3 } from '@/three/builders/utils';
+import { createBrandDecal } from '@/three/branding';
 
 export interface AnimatedMachine {
   group: THREE.Group;
@@ -194,6 +195,19 @@ export function createTruck({ reefer }: { reefer?: boolean } = {}) {
   const trailer = box(2.55, 2.7, 13.6, lambert(reefer ? 0xe8eef4 : 0xdfe6ee));
   trailer.position.set(0, 1.9, 4.8);
   g.add(trailer);
+
+  // Placa de marca en los laterales (logo ALDI Nord).
+  const decalPw = 2.2;
+  const decalPh = 2.3;
+  const decalZ = 8.6;
+  const sideRight = createBrandDecal(decalPw, decalPh);
+  sideRight.position.set(1.3, 2.0, decalZ);
+  sideRight.rotation.y = Math.PI / 2;
+  g.add(sideRight);
+  const sideLeft = createBrandDecal(decalPw, decalPh);
+  sideLeft.position.set(-1.3, 2.0, decalZ);
+  sideLeft.rotation.y = -Math.PI / 2;
+  g.add(sideLeft);
   if (reefer) {
     const unit = box(2.2, 2.4, 0.9, lambert(0xb9c4d2), 0, 1.9, -2.7);
     g.add(unit);

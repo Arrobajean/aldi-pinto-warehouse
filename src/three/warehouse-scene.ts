@@ -12,7 +12,7 @@ import type { SmoothedTrack } from '@/lib/rtls/types';
 import { buildBuilding, type WallMesh } from '@/three/builders/build-building';
 import { buildSite } from '@/three/builders/build-site';
 import { buildRacks, type RacksModel } from '@/three/builders/build-racks';
-import { buildLabels } from '@/three/builders/build-labels';
+import { buildDockLabels, buildLabels } from '@/three/builders/build-labels';
 import { buildSlotPositions } from '@/lib/sim/positions';
 import { colorForStock, type StockColorMode } from '@/lib/stock/colors';
 import { articleForSku } from '@/lib/stock/catalog';
@@ -189,6 +189,7 @@ export class WarehouseScene {
     const labelsGroup = new THREE.Group();
     labelsGroup.name = 'labels';
     labelsGroup.add(labels);
+    labelsGroup.add(buildDockLabels(layout));
     labelsGroup.visible = this.layerVisibility.labels;
     this.scene.add(labelsGroup);
 
@@ -490,8 +491,7 @@ export class WarehouseScene {
       this.entitySync = new EntitySync(this.layout, this.machinesGroup, this.trucksGroup, this.racksModel);
       for (const mesh of this.entitySync.meshes) this.scene.add(mesh);
     }
-    this.entitySync.sync(state);
-    void dt;
+    this.entitySync.sync(state, dt);
   }
 
   /** Capas de localización (rastro y mapa de calor). */

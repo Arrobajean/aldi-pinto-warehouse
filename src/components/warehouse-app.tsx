@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useRef, useState } from 'react';
 import { TopBar } from '@/components/top-bar';
+import { formatSimTime } from '@/lib/sim/clock';
 import { SidePanel } from '@/components/side-panel';
 import { CameraControls } from '@/components/camera-controls';
 import { ZoneCard } from '@/components/zone-card';
@@ -40,6 +41,10 @@ export function WarehouseApp() {
   };
 
   const indicadores = [
+    {
+      label: 'Hora sim.',
+      value: sim.state ? `${formatSimTime(sim.state.ts)} · ${sim.state.shiftId}` : '--:--:--',
+    },
     { label: 'Nave', value: '40.000 m²' },
     { label: 'Ubicaciones', value: w.stats.locations.toLocaleString('es-ES') },
     {

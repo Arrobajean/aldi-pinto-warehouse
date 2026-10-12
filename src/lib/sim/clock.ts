@@ -1,6 +1,6 @@
 import type { SimState } from '@/lib/sim/types';
 
-export const SIM_START_TS = 4 * 3600; // 04:00
+export const SIM_START_TS = 6 * 3600; // 06:00: arranca con el turno de mañana
 export const TICK_STEP = 0.1; // s de simulación por paso fijo
 
 /** Avanza la simulación con paso fijo de 0,1 s y acumulador en el estado. */

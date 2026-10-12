@@ -4,7 +4,7 @@ import { forEachRackSlot } from '@/lib/layout/pinto-layout';
 import { SIM_START_TS } from '@/lib/sim/clock';
 import { generateDemand } from '@/lib/sim/demand';
 import { buildSlotPositions } from '@/lib/sim/positions';
-import type { Machine, Pallet, SimState } from '@/lib/sim/types';
+import { shiftAt, type Machine, type Pallet, type SimState } from '@/lib/sim/types';
 
 const ZONE_TEMP: Record<ZoneId, 'dry' | 'cool' | 'frozen'> = {
   seco: 'dry',
@@ -154,7 +154,7 @@ export function createInitialState(layout: WarehouseLayout, seed = 20260301): Si
     startTs,
     seed,
     rngState: seed,
-    shiftId: 'noche',
+    shiftId: shiftAt(startTs).id,
     lastShiftChange: startTs,
     machines,
     trucks: [],

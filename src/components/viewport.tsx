@@ -11,15 +11,17 @@ interface ViewportProps {
   wallMode: WallMode;
   onSelect: (zoneId: ZoneId | null) => void;
   onHoverZone: (zoneId: ZoneId | null) => void;
+  onSelectEntity?: (kind: 'machine' | 'truck', id: string) => void;
+  onHoverEntity?: (kind: 'machine' | 'truck', id: string) => void;
 }
 
 /** Monta la escena three. Se carga con next/dynamic(ssr:false) desde el contenedor. */
-export function Viewport({ sceneRef, layers, wallMode, onSelect, onHoverZone }: ViewportProps) {
+export function Viewport({ sceneRef, layers, wallMode, onSelect, onHoverZone, onSelectEntity, onHoverEntity }: ViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const callbacks = useRef({ onSelect, onHoverZone });
+  const callbacks = useRef({ onSelect, onHoverZone, onSelectEntity, onHoverEntity });
 
   useEffect(() => {
-    callbacks.current = { onSelect, onHoverZone };
+    callbacks.current = { onSelect, onHoverZone, onSelectEntity, onHoverEntity };
   });
 
   useEffect(() => {
@@ -29,6 +31,8 @@ export function Viewport({ sceneRef, layers, wallMode, onSelect, onHoverZone }: 
     const scene = new WarehouseScene(container, {
       onSelect: (zoneId) => callbacks.current.onSelect(zoneId),
       onHoverZone: (zoneId) => callbacks.current.onHoverZone(zoneId),
+      onSelectEntity: (kind, id) => callbacks.current.onSelectEntity?.(kind, id),
+      onHoverEntity: (kind, id) => callbacks.current.onHoverEntity?.(kind, id),
     });
     sceneRef.current = scene;
 

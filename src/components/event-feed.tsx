@@ -3,10 +3,12 @@
 import { useState } from 'react';
 import { Radio, X } from 'lucide-react';
 import type { SimState } from '@/lib/sim/types';
+import type { GeofenceAlert } from '@/lib/rtls/geofences';
 import { formatSimTime } from '@/lib/sim/clock';
 
 interface EventFeedProps {
   state: SimState;
+  rtlsAlerts?: GeofenceAlert[];
 }
 
 const COLORS: Record<string, string> = {
@@ -25,7 +27,7 @@ const COLORS: Record<string, string> = {
   machine_waiting: 'text-warn',
 };
 
-export function EventFeed({ state }: EventFeedProps) {
+export function EventFeed({ state, rtlsAlerts = [] }: EventFeedProps) {
   const [open, setOpen] = useState(true);
   const events = state.events.slice(-40).reverse();
 
@@ -40,13 +42,19 @@ export function EventFeed({ state }: EventFeedProps) {
       </div>
       {open && (
         <ul className="max-h-[200px] overflow-y-auto p-1.5 text-[11px] leading-snug">
+          {rtlsAlerts.slice(0, 6).map((a) => (
+            <li key={a.id} className="flex gap-2 px-1 py-0.5">
+              <span className="flex-none font-mono text-muted">{formatSimTime(a.ts)}</span>
+              <span className="text-alert">[RTLS] {a.message}</span>
+            </li>
+          ))}
           {events.map((ev, i) => (
             <li key={`${ev.ts}-${i}`} className="flex gap-2 px-1 py-0.5">
               <span className="flex-none font-mono text-muted">{formatSimTime(ev.ts)}</span>
               <span className={COLORS[ev.type] ?? 'text-fg'}>{ev.message}</span>
             </li>
           ))}
-          {events.length === 0 && <li className="px-1 py-1 text-muted">Sin eventos todavía.</li>}
+          {events.length === 0 && rtlsAlerts.length === 0 && <li className="px-1 py-1 text-muted">Sin eventos todavía.</li>}
         </ul>
       )}
     </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { useRef, useState } from 'react';
 import { TopBar } from '@/components/top-bar';
 import { SidePanel } from '@/components/side-panel';
 import { CameraControls } from '@/components/camera-controls';
@@ -10,6 +11,9 @@ import { DockList } from '@/components/dock-list';
 import { EventFeed } from '@/components/event-feed';
 import { useWarehouseScene } from '@/hooks/use-warehouse-scene';
 import { useSimulation } from '@/hooks/use-simulation';
+import { useRtls } from '@/hooks/use-rtls';
+import { MachineCard } from '@/components/machine-card';
+import { EntityLabel } from '@/components/entity-label';
 
 const Viewport = dynamic(() => import('@/components/viewport').then((m) => m.Viewport), {
   ssr: false,
@@ -19,7 +23,15 @@ const Viewport = dynamic(() => import('@/components/viewport').then((m) => m.Vie
 export function WarehouseApp() {
   const w = useWarehouseScene();
   const sim = useSimulation(w.sceneRef);
+  const labelRef = useRef<HTMLDivElement | null>(null);
+  const rtls = useRtls(w.sceneRef, labelRef);
+  const [followingId, setFollowingId] = useState<string | null>(null);
   const selected = w.zones.find((z) => z.id === w.selectedZone) ?? null;
+
+  const handleFollow = (id: string, follow: boolean) => {
+    w.sceneRef.current?.followEntity(follow ? id : null);
+    setFollowingId(follow ? id : null);
+  };
 
   const indicadores = [
     { label: 'Nave', value: '40.000 m²' },
@@ -41,6 +53,8 @@ export function WarehouseApp() {
           wallMode={w.wallMode}
           onSelect={(zoneId) => w.acciones.selectZone(zoneId)}
           onHoverZone={() => {}}
+          onSelectEntity={(kind, id) => rtls.setSelected({ kind, id })}
+          onHoverEntity={(kind, id) => rtls.setHover(kind === 'machine' || kind === 'truck' ? { kind, id } : null)}
         />
 
         <SidePanel
@@ -51,12 +65,33 @@ export function WarehouseApp() {
           onToggleLayer={(id) => w.acciones.toggleLayer(id)}
         />
 
-        {selected && <ZoneCard zone={selected} onClose={() => w.acciones.selectZone(null)} />}
+        {rtls.selected && sim.state ? (
+          <MachineCard
+            state={sim.state}
+            entity={rtls.selected}
+            alerts={rtls.alerts}
+            following={rtls.selected.id === followingId}
+            onFollow={handleFollow}
+            onClose={() => rtls.setSelected(null)}
+          />
+        ) : (
+          selected && sim.state && <ZoneCard zone={selected} onClose={() => w.acciones.selectZone(null)} />
+        )}
+
+        {rtls.hover && sim.state && (
+          <div
+            ref={labelRef}
+            className="absolute z-40 -translate-x-1/2"
+            style={{ display: 'none' }}
+          >
+            <EntityLabel hover={rtls.hover} state={sim.state} following={rtls.hover.id === followingId} />
+          </div>
+        )}
 
         {sim.state && (
           <>
             <DockList state={sim.state} />
-            <EventFeed state={sim.state} />
+            <EventFeed state={sim.state} rtlsAlerts={rtls.alerts} />
           </>
         )}
 

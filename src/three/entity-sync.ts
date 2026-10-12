@@ -42,6 +42,8 @@ export class EntitySync {
         : kind === 'frontal'
           ? createCounterbalance()
           : createOrderPicker();
+    created.group.userData.entityId = id;
+    created.group.userData.entityKind = 'machine';
     ref = { group: created.group, forks: created.nodes.forks, body: created.nodes.body };
     this.machineLayer.add(created.group);
     this.machines.set(id, ref);
@@ -52,6 +54,8 @@ export class EntitySync {
     let ref = this.trucks.get(id);
     if (ref) return ref;
     const t = createTruck({ reefer });
+    t.group.userData.entityId = id;
+    t.group.userData.entityKind = 'truck';
     ref = { group: t.group };
     this.truckLayer.add(t.group);
     this.trucks.set(id, ref);

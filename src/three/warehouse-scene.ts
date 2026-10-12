@@ -6,6 +6,8 @@ import type { SimState } from '@/lib/sim/types';
 import { SimsCamera, type SimsZoomLevel } from '@/three/sims-camera';
 import { applyWallMode, updateWalls, type WallMode } from '@/three/wall-modes';
 import { EntitySync } from '@/three/entity-sync';
+import { RtlsLayers } from '@/three/rtls-layers';
+import type { SmoothedTrack } from '@/lib/rtls/types';
 import { buildBuilding, type WallMesh } from '@/three/builders/build-building';
 import { buildSite } from '@/three/builders/build-site';
 import { buildRacks } from '@/three/builders/build-racks';
@@ -16,6 +18,8 @@ export type SceneLayerId = 'racks' | 'pallets' | 'labels' | 'machines' | 'trucks
 export interface SceneCallbacks {
   onHoverZone?: (zoneId: ZoneId | null) => void;
   onSelect?: (zoneId: ZoneId | null) => void;
+  onSelectEntity?: (kind: 'machine' | 'truck', id: string) => void;
+  onHoverEntity?: (kind: 'machine' | 'truck', id: string) => void;
   onFps?: (fps: number) => void;
 }
 
@@ -62,9 +66,12 @@ export class WarehouseScene {
   private dragState: { x: number; y: number } | null = null;
   private moved = false;
   private hoverZoneId: ZoneId | null = null;
+  private hoverEntityId: string | null = null;
   private machinesGroup!: THREE.Group;
   private trucksGroup!: THREE.Group;
   private entitySync: EntitySync | null = null;
+  private simStateRef: SimState | null = null;
+  private rtlsLayers: RtlsLayers | null = null;
 
   private followTarget: THREE.Object3D | null = null;
 
@@ -210,19 +217,23 @@ export class WarehouseScene {
 
   // --- Cámara / muros ---
   rotate(dir: 1 | -1) {
+    this.stopFollow();
     this.camera.rotate(dir);
     this.syncWallMode();
   }
 
   setZoomLevel(level: SimsZoomLevel) {
+    this.stopFollow();
     this.camera.setZoomLevel(level);
   }
 
   focusZone(zoneId: ZoneId) {
+    this.stopFollow();
     this.camera.focusZone(zoneId);
   }
 
   focusGeneral() {
+    this.stopFollow();
     this.camera.focusGeneral();
   }
 
@@ -237,6 +248,19 @@ export class WarehouseScene {
 
   private syncWallMode() {
     applyWallMode(this.walls, this.wallMode, this.camera.getAngleIndex());
+  }
+
+  /** Proyecta un punto del mundo a coordenadas de pantalla (para etiquetas). */
+  projectToScreen(x: number, z: number): { x: number; y: number } | null {
+    const v = new THREE.Vector3(x, 1.6, z).project(this.camera.camera);
+    if (v.z > 1 || v.z < -1) return null;
+    const w = this.renderer.domElement.clientWidth || 1;
+    const h = this.renderer.domElement.clientHeight || 1;
+    return { x: (v.x + 1) * 0.5 * w, y: (-v.y + 1) * 0.5 * h };
+  }
+
+  getLastState(): SimState | null {
+    return this.simStateRef;
   }
 
   // --- Picking ---
@@ -261,6 +285,7 @@ export class WarehouseScene {
   private onPointerDown = (e: PointerEvent) => {
     this.dragState = { x: e.clientX, y: e.clientY };
     this.moved = false;
+    this.stopFollow();
     if (e.pointerType === 'mouse' && e.button === 0) {
       this.container.setPointerCapture?.(e.pointerId);
     }
@@ -275,6 +300,20 @@ export class WarehouseScene {
       this.dragState = { x: e.clientX, y: e.clientY };
       return;
     }
+    const entity = this.pickEntities(e.clientX, e.clientY);
+    if (entity) {
+      if (this.hoverEntityId !== entity.id) {
+        this.hoverEntityId = entity.id;
+
+        this.callbacks.onHoverEntity?.(entity.kind, entity.id);
+      }
+      return;
+    }
+    if (this.hoverEntityId) {
+      this.hoverEntityId = null;
+
+      this.callbacks.onHoverEntity?.('machine', '');
+    }
     const hits = this.pickZones(e.clientX, e.clientY);
     const zoneId = (hits[0]?.object.userData.zoneId as ZoneId | undefined) ?? null;
     if (zoneId !== this.hoverZoneId) {
@@ -285,9 +324,14 @@ export class WarehouseScene {
 
   private onPointerUp = (e: PointerEvent) => {
     if (this.dragState && !this.moved) {
-      const hits = this.pickZones(e.clientX, e.clientY);
-      const zoneId = (hits[0]?.object.userData.zoneId as ZoneId | undefined) ?? null;
-      this.callbacks.onSelect?.(zoneId);
+      const entity = this.pickEntities(e.clientX, e.clientY);
+      if (entity) {
+        this.callbacks.onSelectEntity?.(entity.kind, entity.id);
+      } else {
+        const hits = this.pickZones(e.clientX, e.clientY);
+        const zoneId = (hits[0]?.object.userData.zoneId as ZoneId | undefined) ?? null;
+        this.callbacks.onSelect?.(zoneId);
+      }
     }
     this.dragState = null;
   };
@@ -298,14 +342,21 @@ export class WarehouseScene {
       this.hoverZoneId = null;
       this.callbacks.onHoverZone?.(null);
     }
+    if (this.hoverEntityId) {
+      this.hoverEntityId = null;
+
+      this.callbacks.onHoverEntity?.('machine', '');
+    }
   };
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
+    this.stopFollow();
     this.camera.wheel(e.deltaY);
   };
 
   private onDblClick = () => {
+    this.stopFollow();
     this.camera.focusGeneral();
   };
 
@@ -389,13 +440,57 @@ export class WarehouseScene {
   // --- Bucle ---
   /** Sincroniza máquinas, camiones y palets dinámicos con la simulación. */
   syncSimulation(state: SimState, dt: number) {
+    this.simStateRef = state;
     if (!this.entitySync) {
       this.entitySync = new EntitySync(this.layout, this.machinesGroup, this.trucksGroup);
       this.scene.add(this.entitySync.paletMesh);
     }
     this.entitySync.sync(state);
-    // Animación simple del seguido (F3 lo completa).
     void dt;
+  }
+
+  /** Capas de localización (rastro y mapa de calor). */
+  updateRtls(now: number, tracks: Map<string, SmoothedTrack>) {
+    if (!this.rtlsLayers) {
+      this.rtlsLayers = new RtlsLayers(this.layout);
+      this.scene.add(this.rtlsLayers.group);
+    }
+    this.rtlsLayers.accumulate(tracks);
+    this.rtlsLayers.update(now, tracks);
+  }
+
+  setRtlsLayer(kind: 'heatmap' | 'trails', visible: boolean) {
+    if (!this.rtlsLayers) return;
+    if (kind === 'heatmap') this.rtlsLayers.setVisibleHeatmap(visible);
+    else this.rtlsLayers.setVisibleTrails(visible);
+  }
+
+  /** Sigue a una entidad con la cámara; `null` la suelta. */
+  followEntity(id: string | null) {
+    this.camera.followEntity(id);
+  }
+
+  private stopFollow() {
+    if (this.camera.followId !== null) this.camera.followEntity(null);
+  }
+
+  private pickEntities(clientX: number, clientY: number): { kind: 'machine' | 'truck'; id: string } | null {
+    this.raycaster.setFromCamera(this.toNdc(clientX, clientY), this.camera.camera);
+    const targets: THREE.Object3D[] = [];
+    for (const g of [this.machinesGroup, this.trucksGroup]) {
+      if (g) g.traverse((o) => targets.push(o));
+    }
+    const hits = this.raycaster.intersectObjects(targets, false);
+    for (const hit of hits) {
+      let obj: THREE.Object3D | null = hit.object;
+      while (obj) {
+        const id = obj.userData.entityId as string | undefined;
+        const kind = obj.userData.entityKind as 'machine' | 'truck' | undefined;
+        if (id && kind) return { kind, id };
+        obj = obj.parent;
+      }
+    }
+    return null;
   }
 
   private loop = () => {
@@ -405,6 +500,17 @@ export class WarehouseScene {
     const dt = Math.min(this.clock.getDelta(), 0.1);
     this.camera.update(dt);
     updateWalls(this.walls, dt);
+
+    // Seguimiento de entidad con la cámara.
+    const followId = this.camera.followId;
+    if (followId && this.simStateRef) {
+      const entity =
+        this.simStateRef.machines.find((mc) => mc.id === followId) ??
+        this.simStateRef.trucks.find((t) => t.id === followId);
+      if (entity) {
+        this.camera.setFollowPosition(entity.pos.x, entity.pos.z);
+      }
+    }
 
     const sun = this.scene.userData.sun as THREE.DirectionalLight | undefined;
     if (sun) {
@@ -453,5 +559,6 @@ export class WarehouseScene {
     if (this.renderer.domElement.parentElement === this.container) {
       this.container.removeChild(this.renderer.domElement);
     }
+    this.rtlsLayers?.dispose();
   }
 }

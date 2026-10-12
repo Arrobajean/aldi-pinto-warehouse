@@ -1,4 +1,4 @@
-import { RagDocumentChunk } from '../types';
+import type { RagDocumentChunk } from '@/lib/types';
 
 export const RAG_KNOWLEDGE_BASE: RagDocumentChunk[] = [
   {

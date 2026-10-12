@@ -1,5 +1,5 @@
-import { RAG_KNOWLEDGE_BASE } from '../data/ragKnowledgeBase';
-import { RagDocumentChunk } from '../types';
+import { RAG_KNOWLEDGE_BASE } from '@/data/ragKnowledgeBase';
+import type { RagDocumentChunk } from '@/lib/types';
 
 export interface RagSearchResult {
   chunk: RagDocumentChunk;

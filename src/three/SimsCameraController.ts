@@ -4,7 +4,6 @@ export type SimsZoomLevel = 1 | 2 | 3;
 
 export class SimsCameraController {
   public camera: THREE.OrthographicCamera;
-  private currentAngleIndex: number = 0; // 0, 1, 2, 3 (each is 90 deg)
   private targetAngleIndex: number = 0;
   private currentRotationAngle: number = Math.PI * 0.25; // 45 deg base
   private targetRotationAngle: number = Math.PI * 0.25;
@@ -145,7 +144,7 @@ export class SimsCameraController {
     this.isDragging = false;
   }
 
-  public update(delta: number = 0.016): void {
+  public update(): void {
     // Interpolate rotation angle smoothly
     this.currentRotationAngle = THREE.MathUtils.lerp(this.currentRotationAngle, this.targetRotationAngle, 0.12);
 

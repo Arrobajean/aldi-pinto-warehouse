@@ -11,6 +11,17 @@ node_modules
 dist
 dist-ssr
 *.local
+*.tsbuildinfo
+
+# next.js
+.next/
+out/
+
+# entornos
+.env*.local
+
+# supabase local
+supabase/.temp
 
 # Editor directories and files
 .vscode/*

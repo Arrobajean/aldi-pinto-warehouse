@@ -5,23 +5,29 @@ import { TopBar } from '@/components/top-bar';
 import { SidePanel } from '@/components/side-panel';
 import { CameraControls } from '@/components/camera-controls';
 import { ZoneCard } from '@/components/zone-card';
+import { SimControls } from '@/components/sim-controls';
+import { DockList } from '@/components/dock-list';
+import { EventFeed } from '@/components/event-feed';
 import { useWarehouseScene } from '@/hooks/use-warehouse-scene';
+import { useSimulation } from '@/hooks/use-simulation';
 
 const Viewport = dynamic(() => import('@/components/viewport').then((m) => m.Viewport), {
   ssr: false,
-  loading: () => (
-    <div className="flex h-full items-center justify-center text-muted">Cargando escena 3D…</div>
-  ),
+  loading: () => <div className="flex h-full items-center justify-center text-muted">Cargando escena 3D…</div>,
 });
 
 export function WarehouseApp() {
   const w = useWarehouseScene();
+  const sim = useSimulation(w.sceneRef);
   const selected = w.zones.find((z) => z.id === w.selectedZone) ?? null;
 
   const indicadores = [
     { label: 'Nave', value: '40.000 m²' },
     { label: 'Ubicaciones', value: w.stats.locations.toLocaleString('es-ES') },
-    { label: 'Muelles', value: String(w.stats.dockCount) },
+    {
+      label: 'Muelles',
+      value: sim.state ? `${w.stats.dockCount} · ${sim.state.dockStates.filter((d) => d.truckId).length} oc.` : String(w.stats.dockCount),
+    },
   ];
 
   return (
@@ -46,6 +52,23 @@ export function WarehouseApp() {
         />
 
         {selected && <ZoneCard zone={selected} onClose={() => w.acciones.selectZone(null)} />}
+
+        {sim.state && (
+          <>
+            <DockList state={sim.state} />
+            <EventFeed state={sim.state} />
+          </>
+        )}
+
+        <SimControls
+          state={sim.state}
+          speed={sim.speed}
+          running={sim.running}
+          onPlay={sim.acciones.play}
+          onPause={sim.acciones.pause}
+          onSpeed={sim.acciones.setSpeed}
+          onRestart={sim.acciones.restart}
+        />
 
         <CameraControls
           zoomLevel={w.zoomLevel}

@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import type { ZoneId } from '@/lib/types';
 import type { WarehouseLayout } from '@/lib/layout/types';
 import { buildPintoLayout } from '@/lib/layout/pinto-layout';
+import type { SimState } from '@/lib/sim/types';
 import { SimsCamera, type SimsZoomLevel } from '@/three/sims-camera';
 import { applyWallMode, updateWalls, type WallMode } from '@/three/wall-modes';
+import { EntitySync } from '@/three/entity-sync';
 import { buildBuilding, type WallMesh } from '@/three/builders/build-building';
 import { buildSite } from '@/three/builders/build-site';
 import { buildRacks } from '@/three/builders/build-racks';
 import { buildLabels } from '@/three/builders/build-labels';
-import { createCounterbalance, createOrderPicker, createReachTruck, createTruck, createWorker } from '@/three/builders/models';
 
 export type SceneLayerId = 'racks' | 'pallets' | 'labels' | 'machines' | 'trucks' | 'exterior' | 'shadows';
 
@@ -61,6 +62,9 @@ export class WarehouseScene {
   private dragState: { x: number; y: number } | null = null;
   private moved = false;
   private hoverZoneId: ZoneId | null = null;
+  private machinesGroup!: THREE.Group;
+  private trucksGroup!: THREE.Group;
+  private entitySync: EntitySync | null = null;
 
   private followTarget: THREE.Object3D | null = null;
 
@@ -149,34 +153,12 @@ export class WarehouseScene {
 
     const machinesGroup = new THREE.Group();
     machinesGroup.name = 'machines';
+    this.machinesGroup = machinesGroup;
     this.scene.add(machinesGroup);
     const trucksGroup = new THREE.Group();
     trucksGroup.name = 'trucks';
+    this.trucksGroup = trucksGroup;
     this.scene.add(trucksGroup);
-
-    // Máquinas y camiones estáticos para validar la escala (F1).
-    const reach = createReachTruck();
-    reach.group.position.set(-68.7, 0, 40);
-    machinesGroup.add(reach.group);
-    const front = createCounterbalance();
-    front.group.position.set(-94, 0, 78);
-    front.group.rotation.y = Math.PI / 2;
-    machinesGroup.add(front.group);
-    const picker = createOrderPicker();
-    picker.group.position.set(52, 0, 8);
-    machinesGroup.add(picker.group);
-
-    const reefer = createTruck({ reefer: true });
-    reefer.group.position.set(-94, 0, 68.4);
-    trucksGroup.add(reefer.group);
-    const dry = createTruck({ reefer: false });
-    dry.group.position.set(-40, 0, 112);
-    dry.group.rotation.y = Math.PI;
-    trucksGroup.add(dry.group);
-
-    const worker = createWorker();
-    worker.group.position.set(-66, 0, 44);
-    machinesGroup.add(worker.group);
 
     this.groups.set('site', siteGroup);
     this.groups.set('building', buildingGroup);
@@ -405,6 +387,17 @@ export class WarehouseScene {
   };
 
   // --- Bucle ---
+  /** Sincroniza máquinas, camiones y palets dinámicos con la simulación. */
+  syncSimulation(state: SimState, dt: number) {
+    if (!this.entitySync) {
+      this.entitySync = new EntitySync(this.layout, this.machinesGroup, this.trucksGroup);
+      this.scene.add(this.entitySync.paletMesh);
+    }
+    this.entitySync.sync(state);
+    // Animación simple del seguido (F3 lo completa).
+    void dt;
+  }
+
   private loop = () => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);

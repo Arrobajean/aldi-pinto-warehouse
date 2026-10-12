@@ -861,9 +861,11 @@ function generateWork(state: SimState, deps: SimDeps) {
       }
     }
     if (!temp) continue;
-    const pool = state.pickingByTemp[temp];
+    // Palés ya reservados por otra recogida abierta no se vuelven a elegir.
+    const reserved = new Set(state.tasks.filter((t) => t.kind === 'pick' && t.state !== 'done').flatMap((t) => t.paletIds));
+    const candidates = state.pickingByTemp[temp].filter((pid) => !reserved.has(pid));
+    if (candidates.length === 0) continue;
     // Muestreo aleatorio (con semilla): las recogidas se reparten por todo el suelo de la sección.
-    const candidates = [...pool];
     const take: string[] = [];
     // Redondeo (no techo): con ceil cada sección sobrepedía y los palés sobrantes se quedaban en la calle.
     for (let k = 0; k < Math.min(Math.round(deficit), 8) && candidates.length > 0; k++) {

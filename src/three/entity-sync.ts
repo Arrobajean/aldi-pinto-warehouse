@@ -313,9 +313,16 @@ export class EntitySync {
         this.machines.delete(id);
       }
     }
+    // Máquinas que comparten el mismo punto (p. ej. varios recogepedidos trabajando en un nodo):
+    // se separan a lo largo del pasillo para que no se dibujen una encima de otra. Solo presentación.
+    const sharing = new Map<string, number>();
     for (const m of state.machines) {
+      const key = `${m.pos.x.toFixed(1)},${m.pos.z.toFixed(1)}`;
+      const slot = sharing.get(key) ?? 0;
+      sharing.set(key, slot + 1);
       const ref = this.getMachine(m.id, m.kind);
-      ref.group.position.set(m.pos.x, 0, m.pos.z);
+      const shift = slot * 1.1;
+      ref.group.position.set(m.pos.x, 0, m.pos.z + shift);
       ref.group.rotation.y = m.heading;
       if (ref.forks) ref.forks.position.y = ref.forkBase + m.liftHeight;
       this.updateRoute(ref, m);

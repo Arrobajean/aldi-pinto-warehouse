@@ -135,15 +135,14 @@ export function createOrderPicker(): AnimatedMachine {
   chassis.position.y = 0.35;
   g.add(chassis);
 
-  const tower = box(0.4, 3.2, 0.4, metalMat(), 0, 1.7, -0.2);
-  g.add(tower);
+  // Plataforma a nivel de suelo: el recogepedidos no eleva al operario (el picking es solo de suelo).
 
-  const platform = box(1.0, 0.06, 0.7, lambert(ORANGE), 0, 3.0, 0.2);
+  const platform = box(1.0, 0.06, 0.7, lambert(ORANGE), 0, 0.55, 0.2);
   g.add(platform);
 
   // Operario de pie sobre la plataforma
   const operator = createWorker();
-  operator.group.position.set(0, 3.0, 0.75);
+  operator.group.position.set(0, 0.55, 0.75);
   g.add(operator.group);
 
   const forks = new THREE.Group();

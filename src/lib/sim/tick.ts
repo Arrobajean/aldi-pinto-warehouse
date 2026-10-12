@@ -10,7 +10,7 @@ import { PathFinder } from '@/lib/sim/path';
 import { emitEvent, nextTaskId } from '@/lib/sim/events';
 import { nextRandom } from '@/lib/sim/init';
 import { shiftAt, type SimState } from '@/lib/sim/types';
-import type { Machine, Pallet, SimTask, Truck } from '@/lib/sim/types';
+import type { Machine, Pallet, Point, SimTask, Truck } from '@/lib/sim/types';
 import type { RoomSpot } from '@/lib/layout/types';
 import { simpleDispatch, type DispatchPolicy } from '@/lib/sim/dispatch';
 
@@ -37,17 +37,6 @@ const MANUAL_STRAP_SECONDS = 45;
 
 function strapperById(deps: SimDeps, id: string) {
   return deps.layout.strappers.find((s) => s.id === id);
-}
-
-/** Palés de un muelle en la cadena de flejado (colas, proceso y salida). */
-function strapPalets(state: SimState, dockId: string): number {
-  let n = 0;
-  for (const st of state.strappers) {
-    n += st.queue.filter((e) => e.dockId === dockId).reduce((k, e) => k + e.paletIds.length, 0);
-    if (st.current?.dockId === dockId) n += st.current.paletIds.length;
-  }
-  n += state.strapOut.filter((e) => e.dockId === dockId).reduce((k, e) => k + e.paletIds.length, 0);
-  return n;
 }
 
 /** Flejadora con cola libre más cercana a un punto; null si todas están llenas. */
@@ -172,10 +161,11 @@ function beginTask(state: SimState, deps: SimDeps, m: Machine, task: SimTask) {
   m.route = deps.indoor.pointsFor(deps.indoor.find(m.pos, deps.indoor.nearestTo(task.to)));
   // En pick, la ruta pasa por cada ubicación del lote.
   if (task.kind === 'pick') {
+    // Cada parada es el punto del pasillo frente al hueco, nunca el hueco dentro de la estantería.
     const stops = task.paletIds
       .map((pid) => state.paletById[pid])
       .filter((p): p is Pallet => Boolean(p))
-      .map((p) => p.pos);
+      .map((p) => accessPoint(deps, p.pos));
     // Si los palets del lote ya no existen (p. ej. retirados), la ruta va directa al destino.
     const first = stops[0] ?? task.to;
     const last = stops[stops.length - 1] ?? task.to;
@@ -326,6 +316,11 @@ const CHARGE_THRESHOLD = 22;
 /** Batería a partir de la cual la carga termina. */
 const CHARGED_LEVEL = 99.5;
 
+/** Punto del grafo de pasillos más cercano a una posición (acceso seguro a un hueco de rack). */
+function accessPoint(deps: SimDeps, pos: Point): Point {
+  return deps.indoor.nodePoint(deps.indoor.nearestTo(pos)) ?? pos;
+}
+
 /** Libera el pasillo reservado. Sin esto, una máquina parada en un pasillo bloquea a las demás. */
 function releaseAisle(state: SimState, m: Machine) {
   if (!m.aisleReserved) return;
@@ -427,7 +422,8 @@ function updateMachine(state: SimState, deps: SimDeps, m: Machine, dt: number) {
       m.batteryEventSent = true;
       emitEvent(state, 'machine_low_battery', `${m.id} (${m.operatorName}) con ${Math.round(m.battery)}% — va a recargar`);
     }
-    const assigned = deps.dispatch.assignTask(state, m);
+    // Fuera de turno (noche) no se asignan tareas: la máquina termina y aparca en la sala de máquinas.
+    const assigned = shiftAt(state.ts).id !== 'noche' && deps.dispatch.assignTask(state, m);
     if (assigned) {
       // Sale de la plaza de sala (o abandona el trayecto hacia ella) para trabajar.
       releaseSpot(state, m);
@@ -759,6 +755,31 @@ function retireShippedPalets(state: SimState, ids: string[]) {
   if (state.outboundDone.length > 500) state.outboundDone.splice(0, state.outboundDone.length - 500);
 }
 
+const TEMPS: Pallet['temp'][] = ['dry', 'cool', 'frozen'];
+/** Reparto supuesto de un pedido multitemperatura entre secciones (ajustar con datos de ventas). */
+const ORDER_TEMP_SHARE: Record<Pallet['temp'], number> = { dry: 0.7, cool: 0.2, frozen: 0.1 };
+
+/** Palés por temperatura que ya están en el circuito de un muelle (lane, flejado, transferencia y recogidas). */
+function dockTempCounts(state: SimState, dockId: string): Record<Pallet['temp'], number> {
+  const c: Record<Pallet['temp'], number> = { dry: 0, cool: 0, frozen: 0 };
+  const add = (ids: string[]) => {
+    for (const pid of ids) {
+      const p = state.paletById[pid];
+      if (p) c[p.temp]++;
+    }
+  };
+  add(state.lanePallets[dockId] ?? []);
+  for (const st of state.strappers) {
+    for (const e of st.queue) if (e.dockId === dockId) add(e.paletIds);
+    if (st.current?.dockId === dockId) add(st.current.paletIds);
+  }
+  for (const e of state.strapOut) if (e.dockId === dockId) add(e.paletIds);
+  for (const t of state.tasks) {
+    if ((t.kind === 'pick' || t.kind === 'transfer') && t.dockId === dockId && t.state !== 'done') add(t.paletIds);
+  }
+  return c;
+}
+
 /** Genera pedidos (pick), reposiciones y putaway usando los índices incrementales. */
 function generateWork(state: SimState, deps: SimDeps) {
   // Putaway: palets en Expedición (staging) → hueco de reserva.
@@ -804,22 +825,28 @@ function generateWork(state: SimState, deps: SimDeps) {
   }
   for (const order of state.demand.orders) {
     if (!loadingIds.has(order.id)) continue;
-    const lane = state.lanePallets[order.dockId] ?? [];
-    const inPrep = strapPalets(state, order.dockId);
-    const inTransfer = state.tasks.filter((t) => t.kind === 'transfer' && t.dockId === order.dockId).reduce((n, t) => n + t.paletIds.length, 0);
-    // Recogidas aún no terminadas para este muelle (en cola o en curso).
+    // Recogidas abiertas para este muelle (en cola o en curso): una a la vez.
     const openPicks = state.tasks.filter((task) => task.kind === 'pick' && task.dockId === order.dockId && task.state !== 'done');
-    const inPick = openPicks.reduce((n, t) => n + t.paletIds.length, 0);
-    const needed = order.paletsCount - lane.length - inPrep - inTransfer - inPick;
-    if (needed <= 0) continue;
-    // Una sola recogida abierta por muelle: evita sobreproducir palets que nadie carga.
     if (openPicks.length > 0) continue;
-    const pool = state.pickingByTemp[order.temp];
-    if (pool.length === 0) continue;
-    // Muestreo aleatorio (con semilla): las recogidas se reparten por todo el suelo de picking.
+    // Cada pedido es multitemperatura: se reparte entre seco, frío y congelado.
+    // Se pide a cada sección lo que le falta según su parte del pedido.
+    const pipeline = dockTempCounts(state, order.dockId);
+    const shares = ORDER_TEMP_SHARE;
+    let temp: Pallet['temp'] | null = null;
+    let deficit = 0;
+    for (const t of TEMPS) {
+      const missing = order.paletsCount * shares[t] - pipeline[t];
+      if (missing > deficit && state.pickingByTemp[t].length > 0) {
+        deficit = missing;
+        temp = t;
+      }
+    }
+    if (!temp) continue;
+    const pool = state.pickingByTemp[temp];
+    // Muestreo aleatorio (con semilla): las recogidas se reparten por todo el suelo de la sección.
     const candidates = [...pool];
     const take: string[] = [];
-    for (let k = 0; k < Math.min(needed, 8) && candidates.length > 0; k++) {
+    for (let k = 0; k < Math.min(Math.ceil(deficit), 8) && candidates.length > 0; k++) {
       const i = Math.floor(nextRandom(state) * candidates.length);
       take.push(candidates.splice(i, 1)[0]);
     }

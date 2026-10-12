@@ -17,7 +17,7 @@ export interface BuildingModel {
 }
 
 const WALL_THICKNESS = 0.4;
-const ZONE_FLOOR_ALPHA = 0.92;
+const ZONE_FLOOR_ALPHA = 1;
 
 function segmentsWithHoles(xMin: number, xMax: number, holes: { xMin: number; xMax: number }[], step = 0.25): { xMin: number; xMax: number }[] {
   const segs: { xMin: number; xMax: number }[] = [];
@@ -35,13 +35,15 @@ function segmentsWithHoles(xMin: number, xMax: number, holes: { xMin: number; xM
 
 function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
   const group = new THREE.Group();
+  // Suelo de hormigón pulido en toda la nave (las salas y marcas se pintan encima).
+  const CONCRETE = 0xa7a8a4;
   const zoneColors: Record<string, number> = {
-    seco: 0xc9ced6,
-    frio: 0x8fd0f2,
-    congelado: 0xbde6ff,
-    fyv: 0xa2e2a4,
-    expedicion: 0xd2d7e0,
-    carga_baterias: 0x9aa3b5,
+    seco: CONCRETE,
+    frio: CONCRETE,
+    congelado: CONCRETE,
+    fyv: CONCRETE,
+    expedicion: CONCRETE,
+    carga_baterias: CONCRETE,
   };
 
   for (const zone of layout.zones) {

@@ -99,17 +99,19 @@ export function createInitialState(layout: WarehouseLayout, seed = 20260301): Si
 
   // Flota inicial. Se reparten por la nave.
   const machines: Machine[] = [];
+  // Las máquinas de almacén empiezan aparcadas en la sala de reposo (nunca dentro de un rack).
+  const parkSpots = layout.rooms.filter((r) => r.kind === 'reposo').flatMap((r) => r.spots);
+  const spotOccupancy: Record<string, string> = {};
+  let parkIdx = 0;
   let mi = 0;
   for (const f of FLEET) {
     for (let i = 0; i < f.base; i++) {
       const prefix = { retractil: 'R', frontal: 'F', recogepedidos: 'P', transpaleta: 'E' }[f.kind];
       const id = `${prefix}-${String(i + 1).padStart(2, '0')}`;
-      const pos =
-        f.kind === 'retractil'
-          ? { x: -115 + rng() * 30, z: -40 + rng() * 10 }
-          : f.kind === 'frontal'
-            ? { x: -110 + rng() * 240, z: 60 + rng() * 12 }
-            : { x: -10 + rng() * 120, z: -5 + rng() * 30 };
+      // Todas las máquinas empiezan aparcadas en la sala de máquinas.
+      const parked = parkSpots[parkIdx++];
+      if (parked) spotOccupancy[parked.id] = id;
+      const pos = parked ? { x: parked.x, z: parked.z } : { x: -115, z: -41 };
       machines.push({
         id,
         kind: f.kind,
@@ -125,7 +127,7 @@ export function createInitialState(layout: WarehouseLayout, seed = 20260301): Si
         liftHeight: 0,
         liftTarget: 0,
         aisleReserved: null,
-        spot: null,
+        spot: parked?.id ?? null,
         mission: null,
         hoursUsed: 0,
         workingRemaining: 0,
@@ -164,7 +166,7 @@ export function createInitialState(layout: WarehouseLayout, seed = 20260301): Si
     dockStates,
     events: [],
     aisleLocks: {},
-    spotOccupancy: {},
+    spotOccupancy,
     rackOccupancy,
     rackDirty: [],
     freeRack,

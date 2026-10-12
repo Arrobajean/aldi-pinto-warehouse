@@ -109,15 +109,15 @@ function buildRooms(): WarehouseRoom[] {
     z: -70,
   }));
   const reposo: RoomSpot[] = [];
-  // 6 filas de 6 plazas: 36 máquinas aparcadas (la flota tiene 35).
+  // 6 filas de 7 plazas: 42 máquinas aparcadas (la flota tiene 41).
   for (const z of [-59, -56, -53, -50, -47, -44]) {
-    for (const x of [-122, -119, -116, -113, -110, -107]) {
+    for (const x of [-123, -120.5, -118, -115.5, -113, -110.5, -108]) {
       reposo.push({ id: `REP-${String(reposo.length + 1).padStart(2, '0')}`, kind: 'reposo', x, z });
     }
   }
   return [
     { id: 'sala-carga', kind: 'carga', label: 'Sala de carga', rect: { xMin: -125, xMax: -105, zMin: -80, zMax: -62 }, spots: carga },
-    { id: 'sala-reposo', kind: 'reposo', label: 'Sala de reposo', rect: { xMin: -125, xMax: -105, zMin: -62, zMax: -40 }, spots: reposo },
+    { id: 'sala-reposo', kind: 'reposo', label: 'Sala de máquinas', rect: { xMin: -125, xMax: -105, zMin: -62, zMax: -40 }, spots: reposo },
   ];
 }
 
@@ -259,7 +259,9 @@ function buildFloorPallets(): { x: number; z: number }[] {
   return palets;
 }
 
-function buildIndoorGraph(rackLines: RackLine[], crossAisles: Rect[], docks: Dock[], rooms: WarehouseRoom[]): Graph {
+function buildIndoorGraph(rackLines: RackLine[], crossAisles: Rect[], docks: Dock[], rooms: WarehouseRoom[], aisles: Aisle[]): Graph {
+  // Los nodos van en el centro del pasillo, nunca en el eje de una estantería.
+  const aisleX = new Map(aisles.map((a) => [a.id, a.xCenter]));
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
   const nodeIndex = new Map<string, number>();
@@ -279,7 +281,7 @@ function buildIndoorGraph(rackLines: RackLine[], crossAisles: Rect[], docks: Doc
   for (const line of rackLines) {
     const key = `${line.zoneId}:${line.aisleId}`;
     if (aisleXZ.some((a) => `${a.zoneId}:${a.aisleId}` === key)) continue;
-    const x = line.xCenter;
+    const x = aisleX.get(line.aisleId) ?? line.xCenter;
     const head = line.segments[0].zStart;
     const tail = line.segments[line.segments.length - 1].zEnd;
     addNode(`aisle-${line.aisleId}-N`, x, head + 0.5);
@@ -290,8 +292,8 @@ function buildIndoorGraph(rackLines: RackLine[], crossAisles: Rect[], docks: Doc
     for (const ca of crossAisles) {
       const cz = (ca.zMin + ca.zMax) / 2;
       // Solo si este pasillo cae dentro del rango x del cruzamiento.
-      if (line.xCenter > ca.xMin && line.xCenter < ca.xMax) {
-        addNode(`aisle-${line.aisleId}-X-${cz}`, line.xCenter, cz);
+      if (x > ca.xMin && x < ca.xMax) {
+        addNode(`aisle-${line.aisleId}-X-${cz}`, x, cz);
         addEdge(`aisle-${line.aisleId}-N`, `aisle-${line.aisleId}-X-${cz}`);
         addEdge(`aisle-${line.aisleId}-X-${cz}`, `aisle-${line.aisleId}-S`);
       }
@@ -300,8 +302,9 @@ function buildIndoorGraph(rackLines: RackLine[], crossAisles: Rect[], docks: Doc
   }
 
   // Salas de reposo y carga: un nodo por plaza, unidos a un vestíbulo que da a un pasillo.
-  const hub = { x: -115, z: -61 };
-  const entrance = { x: -104, z: -61 };
+  // La sala de reposo queda pegada al frente de los racks: su acceso sale por el pasillo transversal del sur.
+  const hub = { x: -115, z: -41 };
+  const entrance = { x: -112, z: -38 };
   addNode('room-hub', hub.x, hub.z);
   addNode('room-entrance', entrance.x, entrance.z);
   addEdge('room-hub', 'room-entrance');
@@ -431,7 +434,7 @@ export function buildPintoLayout(): WarehouseLayout {
     site,
     rooms,
     strappers: STRAPPERS,
-    indoorGraph: buildIndoorGraph(rackLines, crossAisles, docks, rooms),
+    indoorGraph: buildIndoorGraph(rackLines, crossAisles, docks, rooms, aisles),
     yardGraph: buildYardGraph(docks),
     stats,
   };

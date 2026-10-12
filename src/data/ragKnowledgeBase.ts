@@ -48,7 +48,7 @@ Horario límite de entrega: Las tiendas deben recibir los productos frescos ante
    - Mástil triplex de gran altura (hasta 11.5 metros).
    - Utilizadas exclusivamente en los pasillos de estanterías de Seco y Frío para ubicar y desubicar palets pesados.
    - Velocidad máxima autolimitada a 9 km/h en pasillo.
-2. Carretillas Frontales Contrapesadas Jungheinrich (8 unidades):
+2. Apiladores eléctricos Jungheinrich ERE 225i (8 unidades):
    - Capacidad nominal de 2.000 kg.
    - Operan en la playa de muelles para carga y descarga rápida de semirremolques y movimiento en playa de consolidación.
 3. Transpaletas eléctricas con plataforma/asiento lateral Jungheinrich ESE (6 unidades):
@@ -96,7 +96,7 @@ Mantenimiento: Gestión inteligente de recarga con estación de baterías de 400
     keywords: ['seguridad', 'prl', 'riesgos', 'peatones', 'chaleco', 'pasillos', 'espejos', 'velocidad'],
     content: `Normas estrictas de circulación interna en el almacén ALDI Pinto:
 - Separación física de flujos: Pasillos peatonales demarcados en azul con barandillas de polímero deformable en cruces principales.
-- Iluminación Blue-Spot y Red-Zone: Todas las carretillas retráctiles y frontales proyectan un foco azul en el suelo a 5 metros de distancia y un haz rojo perimetral para advertir a peatones antes de doblar esquinas.
+- Iluminación Blue-Spot y Red-Zone: Todas las carretillas retráctiles y ERE 225i proyectan un foco azul en el suelo a 5 metros de distancia y un haz rojo perimetral para advertir a peatones antes de doblar esquinas.
 - Prioridad de paso: Peatones en pasos de cebra señalizados > Carretillas con carga > Carretillas vacías.
 - Uso obligatorio de EPI: Calzado de seguridad S3, chaleco de alta visibilidad clase 2, y guantes anticorte. En cámara de congelado, ropa de abrigo certificada EN 342.`,
   },

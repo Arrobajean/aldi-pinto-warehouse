@@ -6,7 +6,7 @@ import type { GeofenceAlert } from '@/lib/rtls/geofences';
 
 const KIND_LABEL: Record<string, string> = {
   retractil: 'Retráctil Jungheinrich ETV/ETM 214-216',
-  frontal: 'Frontal Jungheinrich',
+  frontal: 'ERE 225i (Jungheinrich)',
   recogepedidos: 'Recogepedidos Jungheinrich ECD 320',
   transpaleta: 'Transpaleta ESE Jungheinrich',
 };

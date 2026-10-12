@@ -17,7 +17,7 @@ export function EntityLabel({ hover, state, following }: EntityLabelProps) {
 
   const operator = m ? m.operatorName : t?.plate ?? '';
   const battery = m ? ` · ⚡ ${m.battery.toFixed(0)}%` : '';
-  const typeLabel = m ? (m.kind === 'retractil' ? 'Retráctil' : m.kind === 'frontal' ? 'Frontal' : 'Picker') : 'Camión';
+  const typeLabel = m ? (m.kind === 'retractil' ? 'Retráctil' : m.kind === 'frontal' ? 'ERE 225i' : 'Picker') : 'Camión';
 
   return (
     <div className="pointer-events-none flex items-center gap-2 rounded-lg border border-accent/60 bg-panel/95 px-2.5 py-1.5 shadow-card backdrop-blur">

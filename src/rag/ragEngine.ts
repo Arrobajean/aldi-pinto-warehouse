@@ -96,7 +96,7 @@ export async function generateRagAnswer(query: string): Promise<RagResponse> {
 Puedes preguntarme sobre:
 - **Las 130 tiendas** en 8 provincias (Madrid, Toledo, Segovia, Ávila, Guadalajara, Ciudad Real, Cáceres, Salamanca).
 - **La zonificación** (Seco, Frío +2 ºC a +4 ºC, Congelado -22 ºC).
-- **La flota de carretillas** retráctiles, frontales y preparadores de picking.
+- **La flota de carretillas** retráctiles, ERE 225i y preparadores de picking.
 - **Protocolos de cadena de frío** y seguridad en muelles de carga.`,
       sources: [],
     };
@@ -140,7 +140,7 @@ La plataforma de Pinto cuenta con 3 zonas térmicas independientes con telemetr�
 La flota de ALDI Pinto está compuesta por **41 unidades eléctricas Jungheinrich** con monitorización telemática:
 
 - **14 Carretillas Retráctiles Jungheinrich ETV/ETM 214-216**: Especializadas en pasillo estrecho con mástil triplex para alturas de hasta 11.5 metros en racks de Seco y Frío. Velocidad autolimitada a 9 km/h.
-- **8 Carretillas Frontales Contrapesadas Jungheinrich**: Con capacidad de 2.000 kg para la descarga rápida de trailers en muelles D-01 a D-03 y carga en D-04 a D-08.
+- **8 Apiladores Jungheinrich ERE 225i**: Con capacidad de 2.000 kg para la descarga rápida de trailers en muelles D-01 a D-03 y carga en D-04 a D-08.
 - **12 Recogepedidos Jungheinrich ECD 320**: Preparan pedidos en el suelo de picking; las referencias de reposición se toman de los niveles superiores o del rack contiguo.
 - **6 Transpaletas ESE Jungheinrich**: Llevan los pedidos preparados de la zona de preparación a la calle de cada muelle.
 

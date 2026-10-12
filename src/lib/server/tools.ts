@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { LiveSnapshot, UiAction } from '@/lib/chat';
 
-const kindLabel: Record<string, string> = { retractil: 'Retráctil', frontal: 'Frontal', recogepedidos: 'Recogepedidos', transpaleta: 'Transpaleta ESE' };
+const kindLabel: Record<string, string> = { retractil: 'Retráctil', frontal: 'ERE 225i', recogepedidos: 'Recogepedidos', transpaleta: 'Transpaleta ESE' };
 
 export const LIVE_TOOLS = [
   {

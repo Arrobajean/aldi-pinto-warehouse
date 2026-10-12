@@ -127,19 +127,20 @@ function moveAlong(state: SimState, deps: SimDeps, m: Machine, dt: number): bool
     m.pos.x = target.x;
     m.pos.z = target.z;
     m.route.shift();
-    if (m.hasPalet) {
-      for (const pid of m.carriedPalets) {
-        const p = state.paletById[pid];
-        if (p) {
-          p.pos.x = m.pos.x;
-          p.pos.z = m.pos.z;
-        }
-      }
-    }
   } else {
     const f = step / dist;
     m.pos.x += dx * f;
     m.pos.z += dz * f;
+  }
+  // Los palets transportados viajan con la máquina en cada paso.
+  if (m.hasPalet) {
+    for (const pid of m.carriedPalets) {
+      const p = state.paletById[pid];
+      if (p) {
+        p.pos.x = m.pos.x;
+        p.pos.z = m.pos.z;
+      }
+    }
   }
   m.speed = step / dt;
 
@@ -159,6 +160,14 @@ function beginTask(state: SimState, deps: SimDeps, m: Machine, task: SimTask) {
   m.hasPalet = task.paletIds.length > 0 && task.kind !== 'pick';
   m.status = 'traveling';
   m.route = deps.indoor.pointsFor(deps.indoor.find(m.pos, deps.indoor.nearestTo(task.to)));
+  // Transferencia y frontal de muelle: primero recogen en 'from' (salida de flejadora / calle) y luego llevan a 'to'.
+  if (task.kind === 'transfer' || task.kind === 'dock_shift') {
+    const fromNode = deps.indoor.nearestTo(task.from);
+    m.route = [
+      ...deps.indoor.pointsFor(deps.indoor.find(m.pos, fromNode)),
+      ...deps.indoor.pointsFor(deps.indoor.find(task.from, deps.indoor.nearestTo(task.to))),
+    ];
+  }
   // En pick, la ruta pasa por cada ubicación del lote.
   if (task.kind === 'pick') {
     // Cada parada es el punto del pasillo frente al hueco, nunca el hueco dentro de la estantería.
@@ -656,7 +665,8 @@ function updateTruck(state: SimState, deps: SimDeps, t: Truck, dt: number) {
       if (t.direction === 'inbound') {
         const nextPalet = t.cargoPaletIds[0];
         if (nextPalet) {
-          const pending = state.tasks.some((task) => task.state === 'queued' && task.kind === 'dock_shift' && task.dockId === dockId);
+          // Una sola tarea de frontal por muelle en curso (no solo en cola): si no, se duplica el mismo palé.
+          const pending = state.tasks.some((task) => task.state !== 'done' && task.kind === 'dock_shift' && task.dockId === dockId);
           if (!pending) {
             const p = state.paletById[nextPalet];
             if (p) {
@@ -682,7 +692,7 @@ function updateTruck(state: SimState, deps: SimDeps, t: Truck, dt: number) {
         const lane = state.lanePallets[dockId] ?? [];
         const need = (ds?.totalPalets ?? 0) - t.paletsLoaded;
         if (need > 0 && lane.length > 0) {
-          const pending = state.tasks.some((task) => task.dockId === dockId && task.state === 'queued' && task.kind === 'dock_shift');
+          const pending = state.tasks.some((task) => task.dockId === dockId && task.state !== 'done' && task.kind === 'dock_shift');
           if (!pending) {
             const pid = lane[0]!;
             state.lanePallets[dockId] = lane.filter((x) => x !== pid);
@@ -819,18 +829,26 @@ function generateWork(state: SimState, deps: SimDeps) {
   }
 
   // Picking para cada camión de salida atracado.
-  const loadingIds = new Set<string>();
+  // El pedido se prepara en el muelle donde está atracado el camión (puede diferir del muelle previsto).
+  const loadingTrucks = new Map<string, Truck>();
   for (const t of state.trucks) {
-    if (t.direction === 'outbound' && t.status === 'at_dock' && t.orderId) loadingIds.add(t.orderId);
+    if (t.direction === 'outbound' && t.status === 'at_dock' && t.orderId && t.dockId) loadingTrucks.set(t.orderId, t);
   }
   for (const order of state.demand.orders) {
-    if (!loadingIds.has(order.id)) continue;
+    const truck = loadingTrucks.get(order.id);
+    if (!truck || !truck.dockId) continue;
+    const dockId = truck.dockId;
     // Recogidas abiertas para este muelle (en cola o en curso): una a la vez.
-    const openPicks = state.tasks.filter((task) => task.kind === 'pick' && task.dockId === order.dockId && task.state !== 'done');
+    const openPicks = state.tasks.filter((task) => task.kind === 'pick' && task.dockId === dockId && task.state !== 'done');
     if (openPicks.length > 0) continue;
     // Cada pedido es multitemperatura: se reparte entre seco, frío y congelado.
     // Se pide a cada sección lo que le falta según su parte del pedido.
-    const pipeline = dockTempCounts(state, order.dockId);
+    const pipeline = dockTempCounts(state, dockId);
+    // Lo ya cargado en el camión también cuenta como servido: no se pide de nuevo.
+    for (const pid of truck.cargoPaletIds) {
+      const p = state.paletById[pid];
+      if (p) pipeline[p.temp]++;
+    }
     const shares = ORDER_TEMP_SHARE;
     let temp: Pallet['temp'] | null = null;
     let deficit = 0;
@@ -846,7 +864,8 @@ function generateWork(state: SimState, deps: SimDeps) {
     // Muestreo aleatorio (con semilla): las recogidas se reparten por todo el suelo de la sección.
     const candidates = [...pool];
     const take: string[] = [];
-    for (let k = 0; k < Math.min(Math.ceil(deficit), 8) && candidates.length > 0; k++) {
+    // Redondeo (no techo): con ceil cada sección sobrepedía y los palés sobrantes se quedaban en la calle.
+    for (let k = 0; k < Math.min(Math.round(deficit), 8) && candidates.length > 0; k++) {
       const i = Math.floor(nextRandom(state) * candidates.length);
       take.push(candidates.splice(i, 1)[0]);
     }
@@ -864,7 +883,7 @@ function generateWork(state: SimState, deps: SimDeps) {
       machineKind: 'recogepedidos',
       from,
       to: station ? (manual ? station.output : station.input) : from,
-      dockId: order.dockId,
+      dockId,
       paletIds: take,
       duration: manual ? 4 + MANUAL_STRAP_SECONDS * take.length : 4,
       strapperId,

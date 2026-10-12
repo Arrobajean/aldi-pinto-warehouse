@@ -34,7 +34,7 @@ Fuentes: alcabodelacalle.es/economia/aldi-amplia-su-centro-logistico-en-pinto/ �
 
 1. Parcela grande con viales y aparcamientos, **nave de ~40.000 m²**.
 2. 8 provincias (tabla de arriba).
-3. IA: reutilizará **su API key del proyecto "RAG Atlas" y Supabase**. **Proveedor del LLM pendiente de confirmar**: pregunta antes de F5. La clave **nunca** va al navegador.
+3. IA: **Google Gemini**, con la misma API key que Jean usa en su proyecto "RAG Atlas", y **Supabase** (pgvector + Edge Functions). La clave **nunca** va al navegador; vive en los secretos de Supabase. No leas `.env` de otros proyectos: Jean la configura con `supabase secrets set`.
 4. "GPS" dentro de una nave = **localización de interior (RTLS por UWB/BLE)**. Se simula, con una interfaz preparada para conectar datos reales.
 
 ---
@@ -89,7 +89,33 @@ Adaptado a Vite (no hay `app/api`; el servidor vive en Supabase):
 
 ---
 
-## 3. Fases
+## 2.4 Turnos de ejecución
+
+El plan se ejecuta en **dos turnos**. Al acabar cada turno: PR de cada rama de fase (o merge, si Jean lo pide), resumen para Jean y actualización de la casilla de estado.
+
+| Turno | Fases | Resultado |
+|---|---|---|
+| **Turno 1 — Núcleo** | F0 base · F1 plano · F2 simulación · F3 localización · F4 stock · F5 asistente Gemini | Gemelo digital completo y funcional |
+| **Turno 2 — Ampliaciones** | F6 indicadores · F7 repetición del día · F8 día/noche y clima · F9 cadena de frío y energía · F10 seguridad PRL · F11 mapa exterior de rutas · F12 asignación inteligente · F13 simulador "¿qué pasa si…?" · F14 informe de turno · F15 multiusuario · F16 integración real | Herramienta de gestión y decisión |
+
+El orden dentro de cada turno respeta las dependencias: F6 alimenta a F9–F14 y F5 alimenta a F14. **No empieces el Turno 2 sin que el Turno 1 cumpla todos sus criterios de aceptación.**
+
+Estado:
+- [ ] F0 · [ ] F1 · [ ] F2 · [ ] F3 · [ ] F4 · [ ] F5
+- [ ] F6 · [ ] F7 · [ ] F8 · [ ] F9 · [ ] F10 · [ ] F11 · [ ] F12 · [ ] F13 · [ ] F14 · [ ] F15 · [ ] F16
+
+### Requisitos de arquitectura del Turno 1 que el Turno 2 necesita
+
+Prepáralos ya en el Turno 1, aunque todavía no se usen:
+- **Bus de eventos** en la simulación (`src/lib/sim/events.ts`): cada cambio relevante (camión llega, palet ubicado, alerta…) emite un evento tipado con `ts` de simulación. Lo consumen F6, F7, F10 y F14.
+- **Estado serializable:** `SimState` debe poder hacerse `structuredClone` y JSON (sin clases con métodos ni referencias a three). Lo necesitan F7 y F15.
+- **Reglas de despacho intercambiables:** la asignación de muelle y tarea va detrás de una interfaz `DispatchPolicy`. F12 añade la versión optimizada.
+- **Fuentes de datos detrás de interfaces** (`PositionSource`, `StockSource`, `TruckSource`). F16 las sustituye por conectores reales.
+- **Sensores simulados de temperatura** por cámara, aunque no se dibujen hasta F9.
+
+---
+
+## 3. Fases — Turno 1
 
 ### F0 — Base funcional (rama `feat/f0-f1-plano`, ya creada)
 
@@ -254,13 +280,22 @@ Todo en `src/lib/sim/` (lógica pura, determinista con semilla).
 
 ### F5 — Asistente IA con RAG y estado en vivo (rama `feat/f5-asistente`)
 
-**Antes de empezar: pregunta a Jean qué proveedor de LLM usa en RAG Atlas** (y si quiere el mismo modelo de embeddings). No leas `.env` de otros proyectos.
+**Proveedor: Google Gemini.** Antes de empezar, confirma con Jean los nombres exactos de los modelos de chat y embeddings que usa en RAG Atlas. Si no los sabe, consulta la documentación actual de Gemini y elige el modelo "flash" vigente para el chat y el modelo de embeddings vigente. No leas `.env` de otros proyectos.
 
 1. **Servidor:** Supabase.
-   - Tabla `kb_chunks` con `pgvector` (`id, title, category, content, embedding`).
-   - Edge Function `chat` (Deno) que: valida la entrada, recupera los top-k por similitud, llama al LLM con los fragmentos recuperados y **herramientas** (tool use), y devuelve la respuesta con sus fuentes.
-   - La API key va en los secretos de Supabase.
-   - Edge Function `ingest` para cargar y re-embeber la base de conocimiento.
+   - Tabla `kb_chunks` con `pgvector` (`id, title, category, content, source_url, embedding vector(N)`). `N` es la dimensión del modelo de embeddings: debe coincidir con `EMBED_DIM`. Índice HNSW y una función SQL `match_kb_chunks(query_embedding, match_count, min_similarity)`.
+   - Secretos (`supabase secrets set`): `GEMINI_API_KEY`, `GEMINI_CHAT_MODEL`, `GEMINI_EMBED_MODEL`, `EMBED_DIM`. Ningún nombre de modelo va escrito en el código.
+   - Edge Function `chat` (Deno):
+     1. valida la entrada;
+     2. crea el embedding de la pregunta (`taskType: RETRIEVAL_QUERY`);
+     3. recupera los top-k con `match_kb_chunks`;
+     4. llama a `generateContent` con un `systemInstruction`, los fragmentos recuperados y `tools: [{ functionDeclarations }]`;
+     5. ejecuta el bucle de **function calling**: cuando la respuesta trae `functionCall`, resuelve la herramienta contra el snapshot que envió el cliente, devuelve un `functionResponse` y vuelve a llamar, con un máximo de 5 vueltas;
+     6. responde `{ answer, sources, ui_actions }`.
+   - La clave va en la cabecera `x-goog-api-key`, **nunca en la URL**. Llamadas con `fetch` directo a la API REST de Gemini o con el SDK oficial de Google para JS. Temperatura baja (0,2).
+   - Edge Function `ingest`: trocea `kb/*.md` (~500–800 tokens con solapamiento), crea embeddings en lote (`taskType: RETRIEVAL_DOCUMENT`) y hace upsert por hash del contenido.
+   - Límite de uso: contador por IP o sesión en una tabla, para no quemar la cuota de la key compartida con RAG Atlas.
+   - Usa un **esquema propio** (`aldi_pinto`) si se comparte el proyecto de Supabase con RAG Atlas.
 2. **Base de conocimiento:** migrar `ragKnowledgeBase.ts` a markdown en `kb/*.md` (procedimientos, PRL, cadena de frío, muelles, maquinaria, tiendas, datos públicos de Pinto con fuente). Script de ingesta.
 3. **Herramientas sobre el estado en vivo:** la parte diferencial. El cliente envía un snapshot compacto o la función lo pide.
    - `get_machine(id)`, `find_machines(filter)`
@@ -269,26 +304,149 @@ Todo en `src/lib/sim/` (lógica pura, determinista con semilla).
    - `get_alerts(since)`, `get_kpis()`
 4. **Acciones en la UI:** el asistente puede devolver `ui_actions` (`focus_entity`, `focus_location`, `highlight_zone`, `open_card`). Por ejemplo: "¿Dónde está la R-07?" → responde y la cámara vuela hasta ella.
 5. Cliente: `src/lib/api.ts` (`postChat`), `src/hooks/use-assistant.ts` y `src/components/assistant/*` (panel de chat con fuentes plegables).
-6. **Eliminar** la llamada directa a Gemini de `ragEngine.ts`. Conservar la búsqueda local como plan B si no hay conexión.
+6. **Eliminar** la llamada directa a Gemini desde el navegador en `ragEngine.ts` (ahora pasa por la Edge Function). Conservar la búsqueda local por palabras clave como plan B si no hay conexión.
 7. **Aceptación:** 10 preguntas de prueba (mitad documentales, mitad sobre el estado en vivo) responden bien y citan fuentes. Ninguna clave aparece en el bundle (`grep` sobre `dist/`).
 
 ---
 
-## 4. Ampliaciones propuestas (F6+, priorizar con Jean)
+## 4. Fases — Turno 2 (ampliaciones)
 
-Ordenadas por valor/esfuerzo:
+Cada fase va en su rama `feat/fN-<nombre>`, con la misma disciplina que el Turno 1: lógica pura en `src/lib/**`, hooks, componentes, `tsc` limpio y fps ≥ 50.
 
-1. **Repetición del día (DVR):** línea de tiempo para volver a cualquier momento (snapshots cada N segundos + log de eventos). "¿Qué pasó en el muelle 12 a las 7:40?"
-2. **Panel de indicadores:** palets por hora, tiempo de muelle por camión, cumplimiento de la ventana de entrega (tiendas antes de las 08:30), ocupación por zona, uso de máquinas, km recorridos.
-3. **Mapa exterior de rutas:** vista 2D o 3D de la zona centro con los camiones de salida avanzando hacia las tiendas de las 8 provincias y su hora estimada de llegada. Se pasa del almacén al mapa con zoom.
-4. **Simulador de "¿qué pasa si…?":** averiar una retráctil, cerrar un pasillo, retrasar 3 camiones o meter un pico de pedidos (Navidad), y ver el impacto en los indicadores. Muy útil para el jefe de almacén.
-5. **Cadena de frío y energía:** sensores de temperatura por cámara con gráfica, puertas de cámara abiertas demasiado tiempo, consumo de los cargadores frente a la producción de las placas solares (encaja con BREEAM y BMS).
-6. **Asignación inteligente:** sugerir el muelle a cada camión entrante y la máquina a cada tarea, comparando una regla simple con la optimizada.
-7. **Seguridad / PRL:** reproducir un incidente de proximidad, mapa de puntos negros a partir del mapa de calor e informe semanal generado por el asistente.
-8. **Modo noche/día y clima:** iluminación según la hora simulada (los turnos de madrugada se ven de noche) y lluvia en el patio. Puro ambiente Sims.
-9. **Informe automático de turno:** al cerrar el turno, el asistente redacta un resumen con incidencias, indicadores y pendientes.
-10. **Multiusuario:** vista compartida en tiempo real con Supabase Realtime y roles (jefe de almacén, jefe de muelles, PRL).
-11. **Integración real:** conectores para el WMS (ubicaciones y stock), el sistema RTLS (posiciones) y el TMS (camiones), sustituyendo las fuentes simuladas detrás de las mismas interfaces.
+### F6 — Panel de indicadores (rama `feat/f6-indicadores`)
+
+1. `src/lib/kpi/`: funciones puras que calculan indicadores a partir del bus de eventos y del `SimState`, con ventanas de 15 min, 1 h, turno y día:
+   - palets por hora (entrada, ubicación, picking, expedición),
+   - **tiempo de camión en la plataforma** (garita → salida) y **tiempo en muelle**, con media y percentil 90,
+   - cumplimiento de la ventana de entrega (% de tiendas servidas antes de las 08:30),
+   - ocupación por zona y por nivel, y uso de máquinas (% del tiempo trabajando, desplazándose, esperando o cargando),
+   - km recorridos por máquina y por tipo,
+   - palets preparados por operario y hora (productividad).
+2. Cálculo incremental (sin recorrer todo el histórico en cada frame) y una serie temporal por indicador guardada en un buffer circular.
+3. UI: panel plegable con fichas de indicadores (valor, tendencia y minigráfica) y una vista ampliada con gráficas por turno. Antes de dibujar, sigue la skill `dataviz`. Usa una librería ligera (por ejemplo uPlot) o SVG propio; nada pesado.
+4. Umbrales configurables: cada indicador tiene objetivo, aviso y crítico, y su color cambia según el umbral.
+5. **Aceptación:** los indicadores cuadran con un recuento manual de eventos en una simulación con semilla fija (test unitario). La vista ampliada no baja los fps del 3D por debajo de 50.
+
+### F7 — Repetición del día (rama `feat/f7-repeticion`)
+
+1. `src/lib/replay/`: snapshots del `SimState` cada 30 s simulados + **log de eventos** completo. Reconstruir el estado de cualquier instante t = snapshot anterior + reaplicar los eventos hasta t, o re-simular con la misma semilla.
+2. Persistencia: en IndexedDB en local; opcionalmente en Supabase Storage para compartir una jornada.
+3. UI: línea de tiempo bajo el canvas, con marcas de eventos (alertas en rojo, llegadas de camión en azul…), y controles para reproducir, pausar, ir a una hora y cambiar la velocidad. Mientras se reproduce se muestra un aviso visible de **"Modo repetición"** y la simulación en vivo sigue corriendo en segundo plano.
+4. Clic en una alerta del feed → salta a ese momento con la cámara en la posición del suceso.
+5. Integración con F5: herramienta `get_state_at(time)` para que el asistente responda "¿qué pasó en el muelle 12 a las 7:40?".
+6. **Aceptación:** saltar a cualquier hora del día tarda menos de 1 s y reproduce exactamente las mismas posiciones que en vivo (test de determinismo).
+
+### F8 — Día/noche y clima (rama `feat/f8-ambiente`)
+
+1. `src/three/environment.ts`: la posición del sol y el color de la luz dependen de la hora simulada. Usa una tabla para Pinto (latitud ~40,2º N) por mes: amanecer, atardecer y elevación máxima.
+2. De noche: luces de la nave (LED) y farolas del patio encendidas, faros de camión y balizas naranjas en las máquinas. La iluminación interior es uniforme, porque es una nave.
+3. Clima simulado o real:
+   - simulado: perfil diario aleatorio con semilla;
+   - real, opcional: temperatura y precipitación de Pinto de una API abierta sin clave (por ejemplo Open-Meteo), llamada desde `src/lib/api.ts`.
+   - Lluvia (partículas instanced en el exterior), suelo mojado (más brillo en el asfalto) y niebla en invierno.
+4. El clima afecta a la simulación: con lluvia, los camiones van más lentos en el patio, y con calor exterior aumenta la carga térmica de las cámaras (se conecta con F9).
+5. Ajuste de calidad: el ambiente se puede desactivar.
+6. **Aceptación:** con ×300 se ve un ciclo de día completo sin saltos de luz bruscos. Con lluvia no se pierden más de 5 fps.
+
+### F9 — Cadena de frío y energía (rama `feat/f9-frio-energia`)
+
+1. **Sensores de temperatura** (de los preparados en el Turno 1): 4–8 por cámara, con un modelo térmico sencillo. La temperatura tiende al punto de consigna y sube con:
+   - las puertas de cámara abiertas (cada paso de máquina abre la puerta rápida unos segundos),
+   - el calor exterior (F8),
+   - una avería del compresor (F13).
+2. **Puertas rápidas** entre zonas como entidades con estado abierta/cerrada. Alerta si una puerta pasa más de 60 s abierta.
+3. Termógrafo de cada camión frigorífico: temperatura del remolque al llegar. Si está fuera de rango, se marca la recepción como **rechazable** y se genera un evento.
+4. **Energía:**
+   - consumo de cargadores (según las máquinas cargando), frío industrial (según la carga térmica) e iluminación;
+   - producción fotovoltaica de la cubierta según la hora y el clima de F8 (potencia pico configurable, por ejemplo 2 MWp; marcar como supuesto);
+   - balance: autoconsumo frente a red.
+5. UI: la capa de temperatura colorea el suelo de cada cámara (mapa térmico interpolado entre sensores); gráficas de temperatura por cámara y de energía; insignias BREEAM y BMS en la ficha de la nave.
+6. RAG (F5): herramientas `get_temperatures(zone)` y `get_energy()`, y la base de conocimiento ampliada con el protocolo de cadena de frío.
+7. **Aceptación:** dejar una puerta de congelado abierta en el simulador sube la temperatura de forma visible, genera una alerta y se recupera al cerrarla.
+
+### F10 — Seguridad / PRL (rama `feat/f10-prl`)
+
+1. Construido sobre las geocercas de F3. Los incidentes de proximidad entre máquina y peatón, los excesos de velocidad y los tiempos de exposición en congelado se registran como **incidentes** con una gravedad.
+2. **Mapa de puntos negros:** agregación espacial de incidentes y casi-accidentes en celdas de 2 m, pintada en el suelo. Se puede filtrar por tipo, turno y rango de fechas.
+3. **Repetición de incidente:** desde la ficha de un incidente, abre F7 en ese instante, con la cámara encuadrada y los dos implicados resaltados.
+4. Sugerencias automáticas por reglas: cruces con mucho tráfico → propone un espejo o un paso peatonal; pasillo con excesos de velocidad repetidos → propone limitar la velocidad.
+5. Informe semanal de PRL generado por el asistente (Gemini) a partir de los incidentes agregados (ver F14 para el mecanismo). Se exporta a PDF con la impresión del navegador y una hoja de estilos `@media print`.
+6. **Aceptación:** un incidente provocado en el simulador aparece en el mapa de puntos negros, en la lista y en el informe.
+
+### F11 — Mapa exterior de rutas (rama `feat/f11-rutas`)
+
+1. Vista nueva "Red": el zoom sale de la parcela y pasa a un mapa de la zona centro con las 8 provincias. Transición animada entre vistas.
+2. Mapa: MapLibre GL con teselas vectoriales libres (OpenFreeMap u otra fuente sin clave; revisa los términos de uso) o, como alternativa, un mapa 2D estilizado con las provincias en GeoJSON y las autovías principales (A-4, A-42, A-6, AP-6, A-2, A-5, A-3).
+3. Coordenadas de las tiendas: geolocalizar los municipios de `stores.ts` con su centroide aproximado (tabla estática en `src/lib/data/towns.ts`). Indicar que las ubicaciones son aproximadas.
+4. Rutas: polilíneas por carretera mediante una tabla precalculada por destino (OSRM público solo en desarrollo, y guardando el resultado), o líneas rectas con un factor de rodeo si no hay rutas.
+5. Camiones de salida de F2: tras salir de la garita, siguen avanzando por su ruta con la hora estimada de llegada y el estado (en ruta, descargando en tienda, vuelta). Cumplimiento de la ventana de las 08:30 por tienda.
+6. Clic en una tienda: pedido del día, palets, muelle de salida, camión asignado y hora estimada de llegada.
+7. **Aceptación:** con la simulación a ×60 se ven los camiones salir de Pinto y llegar a sus tiendas en tiempos verosímiles (Segovia ~1 h 30, Cáceres ~3 h 30).
+
+### F12 — Asignación inteligente (rama `feat/f12-asignacion`)
+
+1. Implementaciones de `DispatchPolicy`:
+   - **Regla simple** (la de F2): primer muelle libre y máquina más cercana libre.
+   - **Optimizada:**
+     - muelles asignados según temperatura, cercanía a la calle de pre-carga y hora de salida;
+     - tareas asignadas con una heurística de coste (distancia + batería + prioridad + especialidad de la máquina), por ejemplo una subasta o un algoritmo húngaro por lotes cada 30 s;
+     - **dobles ciclos**: la retráctil ubica un palet y, en el mismo viaje, baja otro para reponer.
+   - Ubicación dinámica: los artículos de alta rotación se reubican cerca de Expedición de noche (slotting).
+2. Se cambia de política en caliente desde la UI.
+3. Comparativa A/B: ejecuta las dos políticas con la misma semilla en paralelo (Web Worker, sin dibujar la segunda) y muestra la diferencia de indicadores de F6: km recorridos, tiempo en muelle, palets por hora.
+4. La simulación de la segunda política se ejecuta en un **Web Worker** (`src/workers/sim-worker.ts`), posible porque `SimState` es serializable.
+5. **Aceptación:** la política optimizada mejora al menos 2 indicadores frente a la simple con la misma semilla, y la comparativa se muestra en una tabla.
+
+### F13 — Simulador "¿qué pasa si…?" (rama `feat/f13-escenarios`)
+
+1. `src/lib/scenarios/`: escenarios declarativos en JSON (`{ id, nombre, eventos: [{ at, tipo, params }] }`) que se inyectan en la simulación. Tipos:
+   - averiar una máquina (durante X min),
+   - cerrar un pasillo o un muelle,
+   - retrasar N camiones,
+   - pico de pedidos (+X % en una provincia o en todas, por ejemplo Navidad),
+   - ausencias de operarios en un turno,
+   - avería del compresor de una cámara (se conecta con F9),
+   - corte de luz (cargadores parados) y nevada en Guadarrama (rutas a Segovia más lentas, se conecta con F11).
+2. Biblioteca de escenarios predefinidos, más un editor sencillo en la UI (formulario por tipo de evento) con guardado en local o en Supabase.
+3. Ejecución en un **Web Worker** a máxima velocidad, sin dibujar: simula el resto del día en segundos y compara con la línea base (sin el escenario) en los indicadores de F6.
+4. Resultado: informe "impacto del escenario", con gráficas comparadas, tiendas que no llegan a las 08:30, horas extra necesarias y cuellos de botella detectados (el muelle o pasillo con más espera).
+5. RAG (F5): herramienta `run_scenario(spec)`, para que el jefe pueda preguntar "¿qué pasa si mañana fallan 2 retráctiles en el turno de mañana?" y el asistente lance el escenario y explique el resultado.
+6. **Aceptación:** el escenario "Navidad +30 %" se ejecuta en menos de 10 s, muestra el impacto y el asistente lo puede lanzar y explicar.
+
+### F14 — Informe automático de turno (rama `feat/f14-informe-turno`)
+
+1. Al cerrar cada turno (evento de F2), se genera un resumen estructurado (JSON): indicadores de F6, incidencias y alertas, camiones fuera de horario, PRL de F10, frío y energía de F9, y tareas pendientes que pasan al siguiente turno.
+2. Edge Function `shift-report`: recibe el JSON y le pide a **Gemini** que redacte un informe ejecutivo en español (markdown) con este orden: resumen, indicadores, incidencias, acciones recomendadas y pendientes. No debe inventar cifras: solo puede usar las del JSON (indícalo en el `systemInstruction`).
+3. Se guarda en la tabla `shift_reports` de Supabase. UI: lista de informes, vista, exportar a PDF (impresión) y copiar al portapapeles.
+4. Se puede pedir un informe en cualquier momento ("informe de lo que llevamos de turno").
+5. **Aceptación:** cada cifra del informe se puede encontrar en el JSON de entrada (test que extrae los números del markdown y los busca).
+
+### F15 — Multiusuario (rama `feat/f15-multiusuario`)
+
+1. Supabase Auth (email mágico) y roles en una tabla `profiles`: `jefe_almacen`, `jefe_muelles`, `prl`, `lectura`.
+2. **Simulación autoritativa única:**
+   - Opción A: un cliente "anfitrión" ejecuta la simulación y difunde snapshots y eventos por **Supabase Realtime** (canal broadcast); los demás interpolan.
+   - Opción B: la simulación en un proceso de servidor.
+
+   Empieza por la A y deja documentada la B.
+3. Presencia: avatares de quién está conectado y qué está mirando (marcador de cámara de cada usuario en el mapa, como un cursor).
+4. Permisos por rol: solo `jefe_almacen` lanza escenarios y cambia políticas; `prl` ve y gestiona incidentes; `lectura` solo mira. Políticas RLS en todas las tablas.
+5. Comentarios anclados a una posición o entidad del 3D ("este cruce es peligroso"), guardados en Supabase.
+6. **Aceptación:** dos navegadores ven el mismo estado con menos de 1 s de diferencia y los permisos se cumplen tanto en la UI como en la RLS.
+
+### F16 — Integración con sistemas reales (rama `feat/f16-integracion`)
+
+Objetivo: dejar el producto listo para conectarlo a datos reales **sin cambiar la UI ni la escena**.
+
+1. Conectores detrás de las interfaces del Turno 1:
+   - `WmsStockSource` (ubicaciones, stock, pedidos): adaptador REST genérico + importador CSV/Excel.
+   - `RtlsPositionSource`: WebSocket o MQTT (por ejemplo, el formato de los motores UWB más comunes), con un mapeo `tagId → máquina`.
+   - `TmsTruckSource`: llegadas y salidas de camiones; webhook para la garita y lectura de matrículas.
+2. **Calibración del plano:** herramienta para alinear el sistema de coordenadas del RTLS con el del plano (3–4 puntos de control y una transformación afín), guardada por instalación.
+3. **Editor de plano:** importar un DXF o SVG del plano real para sustituir el plano generado, o un editor sencillo de zonas, pasillos y muelles que exporte el mismo `WarehouseLayout`.
+4. Modo mixto: datos reales donde los haya y simulados en el resto, con una insignia "REAL" o "SIM" en cada entidad.
+5. Documentación `docs/integracion.md`: contratos de datos (JSON Schema), ejemplos y una checklist de puesta en marcha.
+6. **Aceptación:** un CSV de stock de ejemplo y un flujo RTLS grabado (fichero de reproducción) mueven el gemelo sin tocar código de UI ni de escena.
 
 ---
 
@@ -302,7 +460,7 @@ Ordenadas por valor/esfuerzo:
 
 ## 6. Preguntas abiertas para Jean
 
-1. Proveedor del LLM y del modelo de embeddings (RAG Atlas) → bloquea F5.
-2. ¿Proyecto de Supabase nuevo o reutilizar el de RAG Atlas con un esquema aparte?
+1. Nombres exactos de los modelos de Gemini (chat y embeddings) que usa en RAG Atlas → se necesita en F5.
+2. ¿Proyecto de Supabase nuevo o el de RAG Atlas con el esquema `aldi_pinto`?
 3. ¿Despliegue? (Vercel para el front + Supabase para las funciones es lo natural).
-4. Prioridad entre las ampliaciones de §4.
+4. ¿Turnos de trabajo reales del almacén? F2 asume mañana, tarde y noche: ajustar si son dos.

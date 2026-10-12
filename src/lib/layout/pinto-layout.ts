@@ -187,25 +187,42 @@ function buildRackLines(): { aisles: Aisle[]; rackLines: RackLine[]; crossAisles
   return { aisles, rackLines, crossAisles };
 }
 
+/**
+ * Muelles agrupados en bloques por temperatura (seco, frío, congelado) con un hueco de maniobra
+ * entre bloques, en lugar de una fila continua. Cada bloque tiene su propia plataforma y marquesinas.
+ */
+const DOCK_BLOCKS: { temp: Dock['temp']; count: number }[] = [
+  { temp: 'dry', count: 12 },
+  { temp: 'dry', count: 12 },
+  { temp: 'dry', count: 12 },
+  { temp: 'cool', count: 10 },
+  { temp: 'frozen', count: 7 },
+  { temp: 'frozen', count: 7 },
+];
+const DOCK_SPACING = 3.5;
+const DOCK_BLOCK_GAP = 6;
+
 function buildDocks(): Dock[] {
   const docks: Dock[] = [];
-  const dockStartX = -120;
-  const dockCount = 60;
-  const spacing = 4;
-  for (let i = 0; i < dockCount; i++) {
-    const x = dockStartX + (i + 0.5) * spacing;
-    const kind: Dock['kind'] = i < 14 ? 'inbound' : 'outbound';
-    const temp: Dock['temp'] = x < 30 ? 'dry' : x < 70 ? 'cool' : 'frozen';
-    docks.push({
-      id: `D${String(i + 1).padStart(2, '0')}`,
-      index: i,
-      x,
-      kind,
-      temp,
-      doorWidth: 3,
-      levelerDepth: 2.5,
-      laneRect: { xMin: x - 1.5, xMax: x + 1.5, zMin: 54, zMax: 76 },
-    });
+  let blockX = -120;
+  let i = 0;
+  for (const block of DOCK_BLOCKS) {
+    for (let k = 0; k < block.count; k++) {
+      const x = blockX + (k + 0.5) * DOCK_SPACING;
+      const kind: Dock['kind'] = i < 14 ? 'inbound' : 'outbound';
+      docks.push({
+        id: `D${String(i + 1).padStart(2, '0')}`,
+        index: i,
+        x,
+        kind,
+        temp: block.temp,
+        doorWidth: 3,
+        levelerDepth: 2.5,
+        laneRect: { xMin: x - 1.5, xMax: x + 1.5, zMin: 54, zMax: 76 },
+      });
+      i++;
+    }
+    blockX += block.count * DOCK_SPACING + DOCK_BLOCK_GAP;
   }
   return docks;
 }

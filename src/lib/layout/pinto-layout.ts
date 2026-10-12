@@ -259,9 +259,44 @@ function buildFloorPallets(): { x: number; z: number }[] {
   return palets;
 }
 
+/** Holgura de paso alrededor de cada estantería (m). */
+const RACK_CLEARANCE = 0.35;
+
+/** Cajas de las estanterías con la holgura de paso. */
+export function rackRects(rackLines: RackLine[]): Rect[] {
+  const rects: Rect[] = [];
+  for (const line of rackLines) {
+    for (const seg of line.segments) {
+      rects.push({
+        xMin: line.xCenter - line.depth / 2 - RACK_CLEARANCE,
+        xMax: line.xCenter + line.depth / 2 + RACK_CLEARANCE,
+        zMin: seg.zStart,
+        zMax: seg.zEnd,
+      });
+    }
+  }
+  return rects;
+}
+
+/** true si el tramo recto entre a y b no entra en ninguna caja (muestreo cada 0,2 m). */
+export function segmentClear(ax: number, az: number, bx: number, bz: number, rects: Rect[]): boolean {
+  const len = Math.hypot(bx - ax, bz - az);
+  const steps = Math.max(1, Math.ceil(len / 0.2));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const x = ax + (bx - ax) * t;
+    const z = az + (bz - az) * t;
+    for (const r of rects) {
+      if (x > r.xMin && x < r.xMax && z >= r.zMin && z <= r.zMax) return false;
+    }
+  }
+  return true;
+}
+
 function buildIndoorGraph(rackLines: RackLine[], crossAisles: Rect[], docks: Dock[], rooms: WarehouseRoom[], aisles: Aisle[]): Graph {
   // Los nodos van en el centro del pasillo, nunca en el eje de una estantería.
   const aisleX = new Map(aisles.map((a) => [a.id, a.xCenter]));
+  const rects = rackRects(rackLines);
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
   const nodeIndex = new Map<string, number>();
@@ -271,10 +306,16 @@ function buildIndoorGraph(rackLines: RackLine[], crossAisles: Rect[], docks: Doc
     nodeIndex.set(id, nodes.length);
     nodes.push({ id, x, z });
   };
+  // Solo se añade la arista si el tramo recto no corta ninguna estantería.
   const addEdge = (from: string, to: string) => {
+    const a = nodeIndex.get(from);
+    const b = nodeIndex.get(to);
+    if (a === undefined || b === undefined) return;
+    if (!segmentClear(nodes[a].x, nodes[a].z, nodes[b].x, nodes[b].z, rects)) return;
     edges.push({ from, to });
     edges.push({ from: to, to: from });
   };
+  const spineNode = (x: number) => `spine-${Math.round(x * 100) / 100}`;
 
   // Pasillos: nodos en cada extremo de segmento y su centro.
   const aisleXZ: { aisleId: string; zoneId: ZoneId; x: number; z: number }[] = [];
@@ -299,6 +340,22 @@ function buildIndoorGraph(rackLines: RackLine[], crossAisles: Rect[], docks: Doc
       }
     }
     addEdge(`aisle-${line.aisleId}-N`, `aisle-${line.aisleId}-S`);
+    // Calle norte, por encima de la cabecera de los racks.
+    addNode(`north-${line.aisleId}`, x, head - 2.5);
+    addEdge(`aisle-${line.aisleId}-N`, `north-${line.aisleId}`);
+  }
+
+  // Los pasillos de una misma calle se enlazan por sus transversales, y todos por la calle norte.
+  for (const ca of crossAisles) {
+    const cz = (ca.zMin + ca.zMax) / 2;
+    const row = aisleXZ.filter((a) => a.x > ca.xMin && a.x < ca.xMax).sort((p, q) => p.x - q.x);
+    for (let i = 0; i < row.length - 1; i++) {
+      addEdge(`aisle-${row[i].aisleId}-X-${cz}`, `aisle-${row[i + 1].aisleId}-X-${cz}`);
+    }
+  }
+  const northRow = [...aisleXZ].sort((p, q) => p.x - q.x);
+  for (let i = 0; i < northRow.length - 1; i++) {
+    addEdge(`north-${northRow[i].aisleId}`, `north-${northRow[i + 1].aisleId}`);
   }
 
   // Salas de reposo y carga: un nodo por plaza, unidos a un vestíbulo que da a un pasillo.
@@ -310,9 +367,9 @@ function buildIndoorGraph(rackLines: RackLine[], crossAisles: Rect[], docks: Doc
   addEdge('room-hub', 'room-entrance');
   let nearest = { id: '', d: Infinity };
   for (const n of nodes) {
-    if (!n.id.startsWith('aisle-') || !n.id.endsWith('-N')) continue;
+    if (!n.id.startsWith('aisle-') || !n.id.includes('-X-')) continue;
     const d = (n.x - entrance.x) ** 2 + (n.z - entrance.z) ** 2;
-    if (d < nearest.d) nearest = { id: n.id, d };
+    if (d < nearest.d && segmentClear(entrance.x, entrance.z, n.x, n.z, rects)) nearest = { id: n.id, d };
   }
   if (nearest.id) addEdge('room-entrance', nearest.id);
   for (const room of rooms) {
@@ -328,17 +385,16 @@ function buildIndoorGraph(rackLines: RackLine[], crossAisles: Rect[], docks: Doc
   for (const a of aisleXZ) spineXs.add(a.x);
   for (const dk of docks) spineXs.add(dk.x);
   const sortedXs = [...spineXs].sort((a, b) => a - b);
-  for (const a of aisleXZ) {
-    addNode(`spine-${a.aisleId}`, a.x, spineZ);
-    addEdge(`aisle-${a.aisleId}-S`, `spine-${a.aisleId}`);
-  }
-
   for (let i = 0; i < sortedXs.length - 1; i++) {
-    const a = `spine-${Math.round(sortedXs[i] * 100) / 100}`;
-    const b = `spine-${Math.round(sortedXs[i + 1] * 100) / 100}`;
+    const a = spineNode(sortedXs[i]);
+    const b = spineNode(sortedXs[i + 1]);
     addNode(a, sortedXs[i], spineZ);
     addNode(b, sortedXs[i + 1], spineZ);
     addEdge(a, b);
+  }
+  // Cada pasillo y cada muelle engancha al spine de su columna (si el tramo queda libre).
+  for (const a of aisleXZ) {
+    addEdge(`aisle-${a.aisleId}-S`, spineNode(a.x));
   }
 
   // Muelles: cada lane se conecta al spine y al frente del muelle.
@@ -346,9 +402,7 @@ function buildIndoorGraph(rackLines: RackLine[], crossAisles: Rect[], docks: Doc
     addNode(`lane-${dk.id}`, dk.x, 60);
     addNode(`dock-${dk.id}`, dk.x, 78);
     addEdge(`lane-${dk.id}`, `dock-${dk.id}`);
-    const spineId = `spine-${dk.id}`;
-    addNode(spineId, dk.x, spineZ);
-    addEdge(spineId, `lane-${dk.id}`);
+    addEdge(spineNode(dk.x), `lane-${dk.id}`);
   }
   // Conexión horizontal de los lanes entre sí.
   const laneXs = docks.map((d) => d.x).sort((a, b) => a - b);

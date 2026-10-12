@@ -1,4 +1,5 @@
 import type { Dock, WarehouseLayout } from '@/lib/layout/types';
+import { rackRects } from '@/lib/layout/pinto-layout';
 import { articleForSku } from '@/lib/stock/catalog';
 import {
   KEEP_OUT,
@@ -161,15 +162,20 @@ function beginTask(state: SimState, deps: SimDeps, m: Machine, task: SimTask) {
   m.route = deps.indoor.pointsFor(deps.indoor.find(m.pos, deps.indoor.nearestTo(task.to)));
   // En pick, la ruta pasa por cada ubicación del lote.
   if (task.kind === 'pick') {
-    // Cada parada es el punto del pasillo frente al hueco, nunca el hueco dentro de la estantería.
-    const stops = task.paletIds
+    // Cada parada es el nodo del pasillo frente al hueco, nunca el hueco dentro de la estantería.
+    // Entre paradas se sigue el grafo de pasillos, no una recta (que cortaría racks).
+    const stopIds = task.paletIds
       .map((pid) => state.paletById[pid])
       .filter((p): p is Pallet => Boolean(p))
-      .map((p) => accessPoint(deps, p.pos));
-    // Si los palets del lote ya no existen (p. ej. retirados), la ruta va directa al destino.
-    const first = stops[0] ?? task.to;
-    const last = stops[stops.length - 1] ?? task.to;
-    m.route = [...deps.indoor.pointsFor(deps.indoor.find(m.pos, deps.indoor.nearestTo(first))), ...stops.slice(1), ...deps.indoor.pointsFor(deps.indoor.find(last, deps.indoor.nearestTo(task.to)))];
+      .map((p) => deps.indoor.nearestTo(p.pos));
+    const route: Point[] = [];
+    let cur: Point = m.pos;
+    for (const id of stopIds) {
+      route.push(...deps.indoor.pointsFor(deps.indoor.find(cur, id)));
+      cur = deps.indoor.nodePoint(id) ?? cur;
+    }
+    route.push(...deps.indoor.pointsFor(deps.indoor.find(cur, deps.indoor.nearestTo(task.to))));
+    m.route = route;
     m.hasPalet = true;
   }
 }
@@ -315,11 +321,6 @@ const AISLE_CAPACITY = 2;
 const CHARGE_THRESHOLD = 22;
 /** Batería a partir de la cual la carga termina. */
 const CHARGED_LEVEL = 99.5;
-
-/** Punto del grafo de pasillos más cercano a una posición (acceso seguro a un hueco de rack). */
-function accessPoint(deps: SimDeps, pos: Point): Point {
-  return deps.indoor.nodePoint(deps.indoor.nearestTo(pos)) ?? pos;
-}
 
 /** Libera el pasillo reservado. Sin esto, una máquina parada en un pasillo bloquea a las demás. */
 function releaseAisle(state: SimState, m: Machine) {
@@ -996,7 +997,7 @@ export function makeDeps(layout: WarehouseLayout): SimDeps {
   const aisles = [...byAisle.entries()].map(([id, a]) => ({ id, ...a }));
   return {
     layout,
-    indoor: new PathFinder(layout.indoorGraph),
+    indoor: new PathFinder(layout.indoorGraph, rackRects(layout.rackLines)),
     yard: new PathFinder(layout.yardGraph),
     dispatch: simpleDispatch,
     aisles,

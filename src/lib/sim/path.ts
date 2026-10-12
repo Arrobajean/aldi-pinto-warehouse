@@ -1,4 +1,5 @@
-import type { Graph, GraphNode } from '@/lib/layout/types';
+import type { Graph, GraphNode, Rect } from '@/lib/layout/types';
+import { segmentClear } from '@/lib/layout/pinto-layout';
 import type { Point } from '@/lib/sim/types';
 
 interface WrappedNode {
@@ -13,8 +14,11 @@ export class PathFinder {
   private nodes = new Map<string, GraphNode>();
   private adj = new Map<string, { to: string; cost: number }[]>();
   private cache = new Map<string, string[]>();
+  /** Estanterías: el punto de partida solo puede ser un nodo al que se llegue en línea recta sin cortarlas. */
+  private rects: Rect[];
 
-  constructor(graph: Graph) {
+  constructor(graph: Graph, rects: Rect[] = []) {
+    this.rects = rects;
     for (const n of graph.nodes) this.nodes.set(n.id, n);
     for (const n of graph.nodes) this.adj.set(n.id, []);
     for (const e of graph.edges) {
@@ -56,10 +60,25 @@ export class PathFinder {
     return n ? { x: n.x, z: n.z } : null;
   }
 
-  /** Ruta de nodos desde un punto (se aproxima al nodo más cercano) hasta otro nodo. */
+  /** Nodo más cercano a `point` al que se llega en línea recta sin cortar racks. */
+  nearestClearTo(point: Point): string {
+    if (this.rects.length === 0) return this.nearestTo(point);
+    const candidates = [...this.nodes.values()].sort(
+      (a, b) => (a.x - point.x) ** 2 + (a.z - point.z) ** 2 - ((b.x - point.x) ** 2 + (b.z - point.z) ** 2),
+    );
+    for (const n of candidates) {
+      if (segmentClear(point.x, point.z, n.x, n.z, this.rects)) return n.id;
+    }
+    return this.nearestTo(point);
+  }
+
+  /** Ruta de nodos desde un punto (se aproxima al nodo libre más cercano) hasta otro nodo. */
   find(from: Point, toId: string): string[] {
-    const fromId = this.nearestTo(from);
-    return this.search(fromId, toId);
+    const fromId = this.nearestClearTo(from);
+    // El primer tramo va del punto actual al nodo de partida (libre por construcción); después, la ruta del grafo.
+    if (fromId === toId) return [toId];
+    const path = this.search(fromId, toId);
+    return path.length ? [fromId, ...path] : [];
   }
 
   /** Ruta entre dos nodos, con caché. */
@@ -77,6 +96,8 @@ export class PathFinder {
 
     const start: WrappedNode = { id: fromId, g: 0, f: 0, prev: null };
     open.set(fromId, start);
+    // Predecesores de todos los nodos visitados: el nodo expandido sale de `open`, así que no sirve para reconstruir.
+    const parent = new Map<string, string>();
 
     let result: string[] = [];
     while (open.size > 0) {
@@ -91,10 +112,10 @@ export class PathFinder {
       if (!current) break;
       if (current.id === toId) {
         const path: string[] = [];
-        let cur: WrappedNode | null = current;
-        while (cur && cur.prev !== null) {
-          path.unshift(cur.id);
-          cur = open.get(cur.prev) ?? null;
+        let cur = current.id;
+        while (parent.has(cur)) {
+          path.unshift(cur);
+          cur = parent.get(cur)!;
         }
         result = path;
         break;
@@ -110,6 +131,7 @@ export class PathFinder {
         const existing = open.get(edge.to);
         if (!existing || g < existing.g) {
           open.set(edge.to, { id: edge.to, g, f: g + h, prev: current.id });
+          parent.set(edge.to, current.id);
         }
       }
     }

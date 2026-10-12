@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { Rect, WarehouseLayout } from '@/lib/layout/types';
 import { box, lambert, plane } from '@/three/builders/utils';
+import { concreteFloor, paintLine, PAINT_WHITE } from '@/three/builders/floor';
+import { dockBlocks } from '@/three/builders/build-building';
 
 const ASPHALT = 0x3a4149;
 const GROUND = 0x474a45;
@@ -36,17 +38,28 @@ function buildRoads(group: THREE.Group, layout: WarehouseLayout) {
   addAsphaltRect(group, { xMin: 150, xMax: 200, zMin: 146, zMax: 180 }, roadMat);
 
   // Patio de maniobra frente a los muelles.
-  addAsphaltRect(group, layout.site.yard, roadMat);
+  // Patio de maniobra: hormigón industrial (no asfalto).
+  const yc = asRect(layout.site.yard);
+  group.add(concreteFloor(yc.w, yc.d, yc.x, 0.05, yc.z, 'yard'));
 }
 
 function buildMarkings(group: THREE.Group, layout: WarehouseLayout) {
   const yellow = new THREE.MeshLambertMaterial({ color: 0xf5c542 });
   const white = new THREE.MeshLambertMaterial({ color: 0xdfe6ee });
 
+  // Paso peatonal (cebra blanca) desde la escalera de cada bloque de muelles hacia el patio.
+  for (const block of dockBlocks(layout.docks)) {
+    const stepX = block.xMin - 1.9 + 0.7;
+    for (const dx of [-0.45, 0, 0.45]) {
+      paintLine(group, stepX + dx, 84, stepX + dx, 90, PAINT_WHITE, 0.35);
+    }
+  }
+
   // Marcos amarillos de los muelles en el patio.
   const dockMarks: { x: number; z: number }[] = [];
   for (const dock of layout.docks) {
-    for (const dz of [82, 87, 92, 97]) dockMarks.push({ x: dock.x - 1.25, z: dz });
+    // Marcas de estacionamiento de camiones en el patio, a partir del borde del andén (z=82,4).
+    for (const dz of [84.5, 89.5, 94.5, 99.5]) dockMarks.push({ x: dock.x - 1.25, z: dz });
   }
   const dockGeo = new THREE.BoxGeometry(0.12, 0.01, 0.6);
   const dockMesh = instanced(dockGeo, yellow, dockMarks.length);

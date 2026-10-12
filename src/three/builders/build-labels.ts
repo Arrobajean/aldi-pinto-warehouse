@@ -43,7 +43,8 @@ export function buildDockLabels(layout: WarehouseLayout): THREE.Group {
     });
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
     sprite.scale.set(3.2, 1.2, 1);
-    sprite.position.set(dock.x, 3.8, 81.6);
+    // Sobre la marquesina (4,45 m) para no quedar dentro del remolque ni de la cubierta.
+    sprite.position.set(dock.x, 5.0, 81.2);
     sprite.renderOrder = 3;
     group.add(sprite);
   }

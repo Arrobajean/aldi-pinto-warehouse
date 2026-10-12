@@ -1,6 +1,16 @@
 import * as THREE from 'three';
 import type { Rect, WarehouseLayout } from '@/lib/layout/types';
-import { box, lambert, plane } from '@/three/builders/utils';
+import { box, lambert } from '@/three/builders/utils';
+import {
+  concreteFloor,
+  concreteMaterial,
+  paintArrow,
+  paintFill,
+  paintLine,
+  paintOutline,
+  PAINT_WHITE,
+  SAFETY_YELLOW,
+} from '@/three/builders/floor';
 
 export interface WallMesh {
   mesh: THREE.Mesh;
@@ -17,11 +27,16 @@ export interface BuildingModel {
 }
 
 const WALL_THICKNESS = 0.4;
-const ZONE_FLOOR_ALPHA = 1;
-/** Ancho dibujado de cada calle de pre-carga (los muelles están cada 4 m). */
+/** Ancho dibujado de cada calle de pre-carga (los muelles están cada 3,5 m dentro de cada bloque). */
 const LANE_DRAW_WIDTH = 2.2;
-/** Ancho de la marquesina de cada muelle (antes 3,2 m: casi tocaba la vecina). */
-const SHELTER_WIDTH = 2.8;
+
+/** Altura del andén de carga sobre el patio: altura de piso de un camión (remolque). */
+export const DOCK_PLATFORM_H = 1.2;
+/** Cara exterior de la fachada sur (puertas en z=80) y borde exterior del andén. */
+export const DOCK_FACE_Z = 80;
+export const DOCK_EDGE_Z = 82.4;
+/** Longitud de la rampa interior de la niveladora (de z=79,8 hacia el interior). */
+const RAMP_RUN = 5;
 
 function segmentsWithHoles(xMin: number, xMax: number, holes: { xMin: number; xMax: number }[], step = 0.25): { xMin: number; xMax: number }[] {
   const segs: { xMin: number; xMax: number }[] = [];
@@ -37,55 +52,48 @@ function segmentsWithHoles(xMin: number, xMax: number, holes: { xMin: number; xM
   return segs;
 }
 
+/** Bloques contiguos de muelles (separados por un hueco de maniobra): una plataforma por bloque. */
+export function dockBlocks(docks: { x: number; temp: string }[]): { xMin: number; xMax: number; temp: string }[] {
+  const sorted = [...docks].sort((a, b) => a.x - b.x);
+  const blocks: { xMin: number; xMax: number; temp: string }[] = [];
+  for (const d of sorted) {
+    const last = blocks[blocks.length - 1];
+    if (last && d.x - last.xMax < 4.5 && last.temp === d.temp) {
+      last.xMax = d.x;
+    } else {
+      blocks.push({ xMin: d.x, xMax: d.x, temp: d.temp });
+    }
+  }
+  return blocks;
+}
+
+/** Suelo de la nave: hormigón gris en cada zona, con las marcas de seguridad pintadas encima. */
 function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
   const group = new THREE.Group();
-  // Suelo de hormigón pulido en toda la nave (las salas y marcas se pintan encima).
-  const CONCRETE = 0xa7a8a4;
-  const zoneColors: Record<string, number> = {
-    seco: CONCRETE,
-    frio: CONCRETE,
-    congelado: CONCRETE,
-    fyv: CONCRETE,
-    expedicion: CONCRETE,
-    carga_baterias: CONCRETE,
-  };
 
   for (const zone of layout.zones) {
     const w = zone.rect.xMax - zone.rect.xMin;
     const d = zone.rect.zMax - zone.rect.zMin;
     const cx = (zone.rect.xMin + zone.rect.xMax) / 2;
     const cz = (zone.rect.zMin + zone.rect.zMax) / 2;
-    const mat = lambert(zoneColors[zone.id] ?? 0xbbbbbb);
-    mat.transparent = true;
-    mat.opacity = ZONE_FLOOR_ALPHA;
-    // El suelo semitransparente no escribe profundidad: evita parpadeos con las marcas de encima.
-    mat.depthWrite = false;
-    const floor = plane(w, d, mat, cx, 0.02, cz);
-    floor.name = `floor-${zone.id}`;
+    const floor = concreteFloor(w, d, cx, 0.02, cz, `floor-${zone.id}`);
     floor.userData.zoneId = zone.id;
     floor.userData.zone = zone;
     group.add(floor);
   }
 
-  // Salas de carga y de reposo: suelo propio y plazas marcadas (cargadores en la sala de carga).
+  // Salas de carga y de reposo: contorno y plazas pintadas sobre el hormigón.
   for (const room of layout.rooms) {
     const r = room.rect;
-    const roomColor = room.kind === 'carga' ? 0xffd23f : 0xbcd9ee;
-    const roomMat = lambert(roomColor, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
-    const floor = plane(r.xMax - r.xMin, r.zMax - r.zMin, roomMat, (r.xMin + r.xMax) / 2, 0.035, (r.zMin + r.zMax) / 2);
-    floor.receiveShadow = false;
-    floor.name = `room-${room.id}`;
-    group.add(floor);
-
-    const spotMat = lambert(room.kind === 'carga' ? 0xffe98a : 0xe9f3fb, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const edge = room.kind === 'carga' ? SAFETY_YELLOW : PAINT_WHITE;
+    paintOutline(group, r.xMin + 0.3, r.xMax - 0.3, r.zMin + 0.3, r.zMax - 0.3, edge, 0.2);
     for (const spot of room.spots) {
-      const marker = plane(2.2, room.kind === 'carga' ? 2.2 : 2.6, spotMat, spot.x, 0.045, spot.z);
-      marker.receiveShadow = false;
-      group.add(marker);
+      const sw = 2.2;
+      const sd = room.kind === 'carga' ? 2.2 : 2.6;
+      paintOutline(group, spot.x - sw / 2, spot.x + sw / 2, spot.z - sd / 2, spot.z + sd / 2, edge, 0.1);
       if (room.kind === 'carga') {
         // Cargador: columna con el cable (volumen simple).
-        const charger = box(0.9, 1.4, 0.5, lambert(0x2a3550), spot.x, 0.7, spot.z - 0.9);
-        group.add(charger);
+        group.add(box(0.9, 1.4, 0.5, lambert(0x2a3550), spot.x, 0.7, spot.z - 0.9));
       }
     }
   }
@@ -98,31 +106,36 @@ function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
     group.add(box(r.xMax - r.xMin, 1.4, r.zMax - r.zMin, lambert(0x3c4a63), cx, 0.7, cz));
     group.add(box(r.xMax - r.xMin - 1, 0.1, 1.2, lambert(0xf39200), cx, 1.45, cz));
     for (const port of [st.input, st.output]) {
-      const mark = plane(3, 2.4, lambert(0xffd23f, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), port.x, 0.045, port.z);
-      mark.receiveShadow = false;
-      group.add(mark);
+      paintOutline(group, port.x - 1.5, port.x + 1.5, port.z - 1.2, port.z + 1.2, SAFETY_YELLOW, 0.15);
     }
   }
 
-  // Calles de pre-carga de cada muelle en Expedición.
-  // polygonOffset: las marcas se pintan sobre el suelo sin z-fighting (parpadeo de texturas).
-  const laneMat = lambert(0xf5c542, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  // Calles de pre-carga: bordes amarillos de seguridad y flecha de sentido hacia la puerta.
   for (const dock of layout.docks) {
-    // Calle visual más estrecha que su rectángulo de simulación: deja hueco libre entre calles contiguas.
-    const laneW = Math.min(LANE_DRAW_WIDTH, dock.laneRect.xMax - dock.laneRect.xMin);
-    const lane = plane(laneW, dock.laneRect.zMax - dock.laneRect.zMin, laneMat, dock.x, 0.04, (dock.laneRect.zMin + dock.laneRect.zMax) / 2);
-    lane.receiveShadow = false;
-    lane.rotation.x = -Math.PI / 2;
-    lane.userData.dockId = dock.id;
-    group.add(lane);
+    const half = Math.min(LANE_DRAW_WIDTH, dock.laneRect.xMax - dock.laneRect.xMin) / 2;
+    const z0 = dock.laneRect.zMin;
+    const z1 = dock.laneRect.zMax;
+    paintLine(group, dock.x - half, z0, dock.x - half, z1, SAFETY_YELLOW, 0.14);
+    paintLine(group, dock.x + half, z0, dock.x + half, z1, SAFETY_YELLOW, 0.14);
+    paintArrow(group, dock.x, z0 + 6, 1, PAINT_WHITE, 0.9);
   }
 
-  // Pasillos transversales: pintura más clara.
-  const crossMat = lambert(0xe7ebf2, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+  // Pasillos transversales: bordes amarillos en sus dos lados largos.
   for (const ca of layout.crossAisles) {
-    const a = plane(ca.xMax - ca.xMin, ca.zMax - ca.zMin, crossMat, (ca.xMin + ca.xMax) / 2, 0.03, (ca.zMin + ca.zMax) / 2);
-    a.receiveShadow = false;
-    group.add(a);
+    paintLine(group, ca.xMin, ca.zMin + 0.2, ca.xMax, ca.zMin + 0.2, SAFETY_YELLOW, 0.14);
+    paintLine(group, ca.xMin, ca.zMax - 0.2, ca.xMax, ca.zMax - 0.2, SAFETY_YELLOW, 0.14);
+  }
+
+  // Pasillos de rack: líneas amarillas a ambos lados de cada pasillo, en los tramos de estantería.
+  for (const aisle of layout.aisles) {
+    const bSide = layout.rackLines.filter((rl) => rl.aisleId === aisle.id && rl.side === 'B');
+    for (const rl of bSide) {
+      for (const seg of rl.segments) {
+        for (const xEdge of [aisle.xCenter - 1.6, aisle.xCenter + 1.6]) {
+          paintLine(group, xEdge, seg.zStart, xEdge, seg.zEnd, SAFETY_YELLOW, 0.12);
+        }
+      }
+    }
   }
 
   return group;
@@ -156,7 +169,7 @@ function buildOuterWalls(layout: WarehouseLayout): WallMesh[] {
   const matSouth = lambert(0xd5dce7);
   const walls: WallMesh[] = [];
 
-  // Fachada sur con los huecos de los muelles.
+  // Fachada sur con los huecos de los muelles (la base de cada hueco la tapa el andén).
   const dockHoles = layout.docks.map((d) => ({ xMin: d.x - d.doorWidth / 2, xMax: d.x + d.doorWidth / 2 }));
   const south = horizontalSegments(WALL_THICKNESS, rect.xMin, rect.xMax, freeHeight, matSouth, dockHoles);
   for (const w of south) {
@@ -225,39 +238,97 @@ function buildInnerWalls(layout: WarehouseLayout): WallMesh[] {
   return walls;
 }
 
+/**
+ * Muelles: andén elevado (1,2 m) por bloques, niveladora con rampa interior, marquesinas por puerta,
+ * escalones peatonales en un extremo de cada bloque y antesala de frío en las zonas refrigeradas.
+ */
 function buildDockFurniture(layout: WarehouseLayout): THREE.Group {
   const group = new THREE.Group();
   const shelterMat = lambert(0x39465a);
   const levelerMat = lambert(0x7a8797);
   const frameMat = lambert(0x27303f);
+  const stepMat = concreteMaterial(1.4, 0.4);
+  const H = DOCK_PLATFORM_H;
+
+  for (const block of dockBlocks(layout.docks)) {
+    const left = block.xMin - 1.9;
+    const right = block.xMax + 1.9;
+    const w = right - left;
+    const cxBlock = (left + right) / 2;
+    // Andén macizo desde la fachada (z=79,8, bajo la pared) hasta su borde exterior.
+    const zStart = DOCK_FACE_Z - 0.2;
+    const depth = DOCK_EDGE_Z - zStart;
+    const platform = box(w, H, depth, concreteMaterial(w, depth), cxBlock, H / 2, zStart + depth / 2);
+    platform.name = `dock-platform-${block.temp}`;
+    group.add(platform);
+    // Franja de seguridad amarilla en el canto del andén.
+    group.add(paintFill(w, 0.3, SAFETY_YELLOW, cxBlock, DOCK_EDGE_Z - 0.2, H + 0.005));
+
+    // Escalones peatonales en el extremo izquierdo del bloque: bajan 0,3 m por peldaño hacia el patio.
+    const stepX = left + 0.7;
+    for (let k = 0; k < 4; k++) {
+      const top = H - (k + 1) * 0.3;
+      group.add(box(1.4, top, 0.4, stepMat, stepX, top / 2, DOCK_EDGE_Z + 0.2 + k * 0.4));
+    }
+    group.add(paintFill(1.4, 0.05, SAFETY_YELLOW, stepX, DOCK_EDGE_Z + 0.2, H + 0.005));
+
+    // Antesala de frío: volumen translúcido junto a los muelles, con franja de temperatura en el suelo.
+    if (block.temp !== 'dry') {
+      const tint = block.temp === 'frozen' ? 0x9fd8ff : 0x7cc4f0;
+      const zMin = 74;
+      const zMax = DOCK_FACE_Z - 0.2;
+      const wAnte = w + 2;
+      const cz = (zMin + zMax) / 2;
+      const vol = new THREE.Mesh(
+        new THREE.BoxGeometry(wAnte, 3.2, zMax - zMin),
+        new THREE.MeshLambertMaterial({ color: tint, transparent: true, opacity: 0.16, depthWrite: false }),
+      );
+      vol.position.set(cxBlock, 1.6, cz);
+      vol.name = `antesala-${block.temp}`;
+      group.add(vol);
+      group.add(paintFill(wAnte, 0.5, tint, cxBlock, zMin + 0.4, 0.04));
+      group.add(paintFill(wAnte, 0.25, tint, cxBlock, zMax - 0.2, 0.04));
+      const panelMat = lambert(0x6fa8d6, { transparent: true, opacity: 0.6 });
+      group.add(box(0.15, 3.2, zMax - zMin, panelMat, block.xMin - 1.2, 1.6, cz));
+      group.add(box(0.15, 3.2, zMax - zMin, panelMat, block.xMax + 1.2, 1.6, cz));
+    }
+  }
 
   for (const dock of layout.docks) {
     const cx = dock.x;
-    // Abrigo (shelter) oscuro alrededor de la puerta, en el exterior.
-    const top = box(SHELTER_WIDTH, 0.25, 0.5, shelterMat, cx, 2.9, 80.25);
-    const sideL = box(0.25, 2.9, 0.5, shelterMat, cx - SHELTER_WIDTH / 2 + 0.125, 1.45, 80.25);
-    const sideR = box(0.25, 2.9, 0.5, shelterMat, cx + SHELTER_WIDTH / 2 - 0.125, 1.45, 80.25);
-    group.add(top, sideL, sideR);
+    // Niveladora: rampa metálica interior, desde el andén hasta el suelo de la nave.
+    const theta = Math.atan(H / RAMP_RUN);
+    const len = Math.hypot(RAMP_RUN, H);
+    const rampZ = DOCK_FACE_Z - 0.2 - RAMP_RUN / 2;
+    const ramp = box(dock.doorWidth, 0.1, len, levelerMat, cx, H / 2, rampZ);
+    ramp.rotation.x = -theta;
+    group.add(ramp);
 
-    // Niveladora interior (rampa hacia Expedición).
-    const leveler = box(2.6, 0.12, dock.levelerDepth, levelerMat, cx, 0.06, 77.2);
-    group.add(leveler);
+    // Placa de la niveladora sobre el andén (labio que se apoya en la caja del camión).
+    group.add(box(dock.doorWidth, 0.05, DOCK_EDGE_Z - DOCK_FACE_Z + 0.2, levelerMat, cx, H + 0.025, (DOCK_EDGE_Z + DOCK_FACE_Z - 0.2) / 2));
+
+    // Marquesina a 4,3 m con dos pilares fuera del ancho del remolque (2,55 m).
+    group.add(box(3.2, 0.25, 2.0, shelterMat, cx, 4.45, 81.2));
+    group.add(box(0.18, 3.1, 0.18, shelterMat, cx - 1.5, H + 1.55, 82.1));
+    group.add(box(0.18, 3.1, 0.18, shelterMat, cx + 1.5, H + 1.55, 82.1));
 
     // Marco de la puerta.
-    const frameTop = box(3.0, 0.2, 0.2, frameMat, cx, 2.6, 80.1);
-    const frameEdge = box(0.2, 2.6, 0.2, frameMat, cx - 1.5, 1.3, 80.1);
-    const frameEdge2 = box(0.2, 2.6, 0.2, frameMat, cx + 1.5, 1.3, 80.1);
-    group.add(frameTop, frameEdge, frameEdge2);
+    group.add(box(3.0, 0.2, 0.2, frameMat, cx, 2.6, 80.1));
+    group.add(box(0.2, 2.6, 0.2, frameMat, cx - 1.5, 1.3, 80.1));
+    group.add(box(0.2, 2.6, 0.2, frameMat, cx + 1.5, 1.3, 80.1));
   }
 
   return group;
 }
 
+function buildOuterAndInner(layout: WarehouseLayout) {
+  return { outer: buildOuterWalls(layout), inner: buildInnerWalls(layout) };
+}
+
 export function buildBuilding(layout: WarehouseLayout): BuildingModel {
   const group = new THREE.Group();
   group.add(buildZoneFloors(layout));
-  const outerWalls = buildOuterWalls(layout);
-  const innerWalls = buildInnerWalls(layout);
+  const { outer: outerWalls, inner: innerWalls } = buildOuterAndInner(layout);
 
   for (const w of outerWalls) group.add(w.mesh);
   for (const w of innerWalls) group.add(w.mesh);

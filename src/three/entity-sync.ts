@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { WarehouseLayout } from '@/lib/layout/types';
 import { forEachRackSlot } from '@/lib/layout/pinto-layout';
 import type { SimState } from '@/lib/sim/types';
-import { createCounterbalance, createOrderPicker, createReachTruck, createTruck } from '@/three/builders/models';
+import { createCounterbalance, createOrderPicker, createPalletTruck, createReachTruck, createTruck } from '@/three/builders/models';
 import type { RacksModel } from '@/three/builders/build-racks';
 
 /** Sube al GPU solo el rango de instancias modificado en este fotograma. */
@@ -28,7 +28,7 @@ const RACK_PALET_H = 1.2;
 /** Puntos máximos de una ruta dibujada. */
 const ROUTE_MAX_POINTS = 120;
 /** Color de la ruta por tipo de máquina. */
-const ROUTE_COLOR: Record<string, number> = { retractil: 0x22a6e0, frontal: 0xf39200, recogepedidos: 0x2ecc71 };
+const ROUTE_COLOR: Record<string, number> = { retractil: 0x22a6e0, frontal: 0xf39200, recogepedidos: 0x2ecc71, transpaleta: 0xb07cff };
 
 export class EntitySync {
   private machines = new Map<string, ModelRef>();
@@ -96,7 +96,9 @@ export class EntitySync {
         ? createReachTruck()
         : kind === 'frontal'
           ? createCounterbalance()
-          : createOrderPicker();
+          : kind === 'transpaleta'
+            ? createPalletTruck()
+            : createOrderPicker();
     created.group.userData.entityId = id;
     created.group.userData.entityKind = 'machine';
     ref = {

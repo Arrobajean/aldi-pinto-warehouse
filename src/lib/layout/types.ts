@@ -143,9 +143,20 @@ export interface WarehouseRoom {
   spots: RoomSpot[];
 }
 
+/** Flejadora automática: entrada (recogepedidos) y salida (transpaleta ESE). */
+export interface Strapper {
+  id: string;
+  rect: Rect;
+  input: { x: number; z: number };
+  output: { x: number; z: number };
+  /** Segundos de proceso por palé (fleje automático). */
+  secondsPerPallet: number;
+}
+
 export interface WarehouseLayout {
   parcel: Rect;
   rooms: WarehouseRoom[];
+  strappers: Strapper[];
   roadWidth: number;
   building: { rect: Rect; freeHeight: number };
   zones: ZoneInfo[];

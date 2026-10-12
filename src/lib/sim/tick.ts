@@ -27,7 +27,71 @@ const SPEED: Record<Machine['kind'], { empty: number; load: number }> = {
   retractil: { empty: 2.3, load: 0.9 },
   frontal: { empty: 2.0, load: 1.0 },
   recogepedidos: { empty: 1.8, load: 1.4 },
+  transpaleta: { empty: 1.6, load: 1.2 },
 };
+
+/** Capacidad de cola de cada flejadora (palés) antes de considerarla llena. */
+const STRAP_QUEUE_LIMIT = 8;
+/** Segundos por palé que tarda el preparador en flejar a mano (tren lleno). */
+const MANUAL_STRAP_SECONDS = 45;
+
+function strapperById(deps: SimDeps, id: string) {
+  return deps.layout.strappers.find((s) => s.id === id);
+}
+
+/** Palés de un muelle en la cadena de flejado (colas, proceso y salida). */
+function strapPalets(state: SimState, dockId: string): number {
+  let n = 0;
+  for (const st of state.strappers) {
+    n += st.queue.filter((e) => e.dockId === dockId).reduce((k, e) => k + e.paletIds.length, 0);
+    if (st.current?.dockId === dockId) n += st.current.paletIds.length;
+  }
+  n += state.strapOut.filter((e) => e.dockId === dockId).reduce((k, e) => k + e.paletIds.length, 0);
+  return n;
+}
+
+/** Flejadora con cola libre más cercana a un punto; null si todas están llenas. */
+function freeStrapper(state: SimState, deps: SimDeps, at: { x: number; z: number }) {
+  let best: { id: string; d: number } | null = null;
+  for (const st of state.strappers) {
+    const load = st.queue.reduce((k, e) => k + e.paletIds.length, 0) + (st.current?.paletIds.length ?? 0);
+    if (load >= STRAP_QUEUE_LIMIT) continue;
+    const station = strapperById(deps, st.id);
+    if (!station) continue;
+    const d = (station.input.x - at.x) ** 2 + (station.input.z - at.z) ** 2;
+    if (!best || d < best.d) best = { id: st.id, d };
+  }
+  return best?.id ?? null;
+}
+
+/** Flejadora más cercana (para el caso manual). */
+function nearestStrapper(deps: SimDeps, at: { x: number; z: number }): string {
+  let best = deps.layout.strappers[0];
+  let bestD = Infinity;
+  for (const s of deps.layout.strappers) {
+    const d = (s.output.x - at.x) ** 2 + (s.output.z - at.z) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = s;
+    }
+  }
+  return best.id;
+}
+
+/** Avanza una flejadora: procesa un lote a la vez y lo deja en su salida. */
+function advanceStrapper(state: SimState, deps: SimDeps, st: SimState['strappers'][number]) {
+  const station = strapperById(deps, st.id);
+  if (!station) return;
+  if (st.current && state.ts >= st.current.doneAt) {
+    state.strapOut.push({ dockId: st.current.dockId, paletIds: st.current.paletIds, strapperId: st.id });
+    st.current = null;
+  }
+  if (!st.current && st.queue.length > 0) {
+    const entry = st.queue.shift()!;
+    const seconds = station.secondsPerPallet * entry.paletIds.length;
+    st.current = { dockId: entry.dockId, paletIds: entry.paletIds, doneAt: state.ts + seconds };
+  }
+}
 
 const TRUCK_YARD_SPEED = 4.2; // 15 km/h
 const PLATES = ['E-4821-KLP', 'E-9114-LCM', 'E-2650-PRQ', 'E-7308-JHV', 'E-1185-BNK', 'E-6620-XWZ', 'E-3456-TDQ', 'E-8899-MFA'];
@@ -123,7 +187,6 @@ function beginTask(state: SimState, deps: SimDeps, m: Machine, task: SimTask) {
 function completeTask(state: SimState, deps: SimDeps, m: Machine, task: SimTask) {
   m.liftTarget = 0;
   task.state = 'done';
-  const dock = task.dockId ? deps.layout.docks.find((d) => d.id === task.dockId) : undefined;
 
   if (task.kind === 'putaway' && task.toLocId) {
     const p = state.paletById[task.paletIds[0]];
@@ -162,7 +225,8 @@ function completeTask(state: SimState, deps: SimDeps, m: Machine, task: SimTask)
       emitEvent(state, 'pallet_picked', `${m.id} repuso ${p.id} en ${task.toLocId} (picking)`);
     }
   } else if (task.kind === 'pick') {
-    const lanePoint = dock ? stagingPoint(dock) : task.to;
+    const station = task.strapperId ? strapperById(deps, task.strapperId) : undefined;
+    const lanePoint = station ? (task.manual ? station.output : station.input) : task.to;
     for (const pid of task.paletIds) {
       const p = state.paletById[pid];
       if (!p) continue;
@@ -179,11 +243,33 @@ function completeTask(state: SimState, deps: SimDeps, m: Machine, task: SimTask)
       p.state = 'prepared';
       p.pos = { ...lanePoint };
       p.dockId = task.dockId;
-      if (task.dockId) state.lanePallets[task.dockId] = [...(state.lanePallets[task.dockId] ?? []), p.id];
+    }
+    // Entrada en la flejadora (cola) o, si se ha flejado a mano, directamente en su salida.
+    if (task.dockId && task.strapperId) {
+      const ids = task.paletIds.filter((pid) => state.paletById[pid]);
+      if (task.manual) {
+        state.strapOut.push({ dockId: task.dockId, paletIds: ids, strapperId: task.strapperId });
+      } else {
+        const st = state.strappers.find((x) => x.id === task.strapperId);
+        if (st) st.queue.push({ dockId: task.dockId, paletIds: ids });
+      }
     }
     state.stats.picked += task.paletIds.length;
     state.stats.prepared += task.paletIds.length;
     emitEvent(state, 'pallet_prepared', `${m.id} preparó ${task.paletIds.length} palets en la calle de ${task.dockId}`);
+  } else if (task.kind === 'transfer' && task.dockId) {
+    // La transpaleta ESE deja los pedidos en la calle del muelle.
+    const taskDock = deps.layout.docks.find((d) => d.id === task.dockId);
+    if (!taskDock) return;
+    const lane = stagingPoint(taskDock);
+    for (const pid of task.paletIds) {
+      const p = state.paletById[pid];
+      if (!p) continue;
+      p.pos = { ...lane };
+      p.dockId = task.dockId;
+      state.lanePallets[task.dockId] = [...(state.lanePallets[task.dockId] ?? []), pid];
+    }
+    emitEvent(state, 'pallet_prepared', `${m.id} llevó ${task.paletIds.length} palets preparados a la calle de ${task.dockId}`);
   } else if (task.kind === 'dock_shift') {
     const taskDock = task.dockId ? deps.layout.docks.find((d) => d.id === task.dockId) : undefined;
     const truck = state.trucks.find((t) => t.dockId === task.dockId);
@@ -719,25 +805,63 @@ function generateWork(state: SimState, deps: SimDeps) {
   for (const order of state.demand.orders) {
     if (!loadingIds.has(order.id)) continue;
     const lane = state.lanePallets[order.dockId] ?? [];
-    const needed = order.paletsCount - lane.length;
+    const inPrep = strapPalets(state, order.dockId);
+    const inTransfer = state.tasks.filter((t) => t.kind === 'transfer' && t.dockId === order.dockId).reduce((n, t) => n + t.paletIds.length, 0);
+    // Recogidas aún no terminadas para este muelle (en cola o en curso).
+    const openPicks = state.tasks.filter((task) => task.kind === 'pick' && task.dockId === order.dockId && task.state !== 'done');
+    const inPick = openPicks.reduce((n, t) => n + t.paletIds.length, 0);
+    const needed = order.paletsCount - lane.length - inPrep - inTransfer - inPick;
     if (needed <= 0) continue;
-    const pending = state.tasks.some((task) => task.kind === 'pick' && task.state === 'queued' && task.dockId === order.dockId);
-    if (pending) continue;
+    // Una sola recogida abierta por muelle: evita sobreproducir palets que nadie carga.
+    if (openPicks.length > 0) continue;
     const pool = state.pickingByTemp[order.temp];
     if (pool.length === 0) continue;
-    const take = pool.slice(0, Math.min(needed, 8));
+    // Muestreo aleatorio (con semilla): las recogidas se reparten por todo el suelo de picking.
+    const candidates = [...pool];
+    const take: string[] = [];
+    for (let k = 0; k < Math.min(needed, 8) && candidates.length > 0; k++) {
+      const i = Math.floor(nextRandom(state) * candidates.length);
+      take.push(candidates.splice(i, 1)[0]);
+    }
     if (take.length === 0) continue;
-    const dock = deps.layout.docks.find((d) => d.id === order.dockId);
     const firstSlot = state.slotPos[state.paletById[take[0]]?.locId ?? ''];
+    const from = firstSlot ? { x: firstSlot.x, z: firstSlot.z } : { x: 0, z: 47 };
+    // Entrada de la flejadora con cola libre; si las dos están llenas, el preparador flejará a mano.
+    const freeId = freeStrapper(state, deps, from);
+    const manual = freeId === null;
+    const strapperId = freeId ?? nearestStrapper(deps, from);
+    const station = strapperById(deps, strapperId);
     state.tasks.push({
       id: nextTaskId('TSK'),
       kind: 'pick',
       machineKind: 'recogepedidos',
-      from: firstSlot ? { x: firstSlot.x, z: firstSlot.z } : { x: 0, z: 47 },
-      to: dock ? stagingPoint(dock) : { x: 0, z: 60 },
+      from,
+      to: station ? (manual ? station.output : station.input) : from,
       dockId: order.dockId,
       paletIds: take,
-      duration: 4,
+      duration: manual ? 4 + MANUAL_STRAP_SECONDS * take.length : 4,
+      strapperId,
+      manual,
+      state: 'queued',
+    });
+  }
+
+  // Transferencia: los lotes ya flejados salen de la flejadora y la ESE los lleva a la calle del muelle.
+  for (const st of state.strappers) advanceStrapper(state, deps, st);
+  for (const entry of [...state.strapOut]) {
+    if (state.tasks.some((t) => t.kind === 'transfer' && t.dockId === entry.dockId)) continue;
+    const dk = deps.layout.docks.find((d) => d.id === entry.dockId);
+    if (!dk) continue;
+    state.strapOut = state.strapOut.filter((e) => e !== entry);
+    state.tasks.push({
+      id: nextTaskId('TSK'),
+      kind: 'transfer',
+      machineKind: 'transpaleta',
+      from: { ...(strapperById(deps, entry.strapperId)?.output ?? { x: 0, z: 47 }) },
+      to: stagingPoint(dk),
+      dockId: entry.dockId,
+      paletIds: [...entry.paletIds],
+      duration: 3 + entry.paletIds.length * 0.8,
       state: 'queued',
     });
   }
@@ -749,13 +873,34 @@ function generateWork(state: SimState, deps: SimDeps) {
     if (state.storedByZone[zone] === 0) continue;
     const freeL0 = state.freeL0ByZone[zone][0];
     if (!freeL0) continue;
-    const reserveEntry = Object.keys(state.rackOccupancy).find((loc) => {
-      const slot = state.slotPos[loc];
-      const p = state.paletById[state.rackOccupancy[loc]];
-      return p && p.state === 'stored' && slot.zoneId === zone && slot.level >= 1;
-    });
-    if (!reserveEntry) continue;
     const toSlot = state.slotPos[freeL0];
+    // Producto a reponer: el más escaso en picking que tenga reserva en la zona.
+    const pickCount: Record<string, number> = {};
+    for (const pid of state.pickingByTemp[zone === 'seco' ? 'dry' : zone === 'frio' ? 'cool' : 'frozen']) {
+      const sku = state.paletById[pid]?.sku ?? '';
+      pickCount[sku] = (pickCount[sku] ?? 0) + 1;
+    }
+    // Reserva más cercana de cada producto (arriba o en el rack de al lado).
+    const nearestReserve = new Map<string, { loc: string; d: number }>();
+    for (const loc of Object.keys(state.rackOccupancy)) {
+      const slot = state.slotPos[loc];
+      if (!slot || slot.zoneId !== zone || slot.level < 1) continue;
+      const p = state.paletById[state.rackOccupancy[loc]];
+      if (!p || p.state !== 'stored') continue;
+      const d = (slot.x - toSlot.x) ** 2 + (slot.z - toSlot.z) ** 2;
+      const best = nearestReserve.get(p.sku);
+      if (!best || d < best.d) nearestReserve.set(p.sku, { loc, d });
+    }
+    let reserveEntry: string | undefined;
+    let bestCount = Infinity;
+    for (const [sku, cand] of nearestReserve) {
+      const count = pickCount[sku] ?? 0;
+      if (count < bestCount) {
+        bestCount = count;
+        reserveEntry = cand.loc;
+      }
+    }
+    if (!reserveEntry) continue;
     state.freeL0ByZone[zone].shift();
     state.tasks.push({
       id: nextTaskId('TSK'),

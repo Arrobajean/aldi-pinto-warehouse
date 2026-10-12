@@ -2,12 +2,12 @@ import 'server-only';
 
 import type { LiveSnapshot, UiAction } from '@/lib/chat';
 
-const kindLabel: Record<string, string> = { retractil: 'Retráctil', frontal: 'Frontal', recogepedidos: 'Recogepedidos' };
+const kindLabel: Record<string, string> = { retractil: 'Retráctil', frontal: 'Frontal', recogepedidos: 'Recogepedidos', transpaleta: 'Transpaleta ESE' };
 
 export const LIVE_TOOLS = [
   {
     name: 'get_machine',
-    description: 'Telemetría de una máquina (retráctil, frontal, recogepedidos) por su id.',
+    description: 'Telemetría de una máquina (retráctil, frontal, recogepedidos, transpaleta) por su id.',
     parameters: {
       type: 'object',
       properties: { id: { type: 'string', description: 'Id de la máquina, p. ej. R-07' } },
@@ -20,7 +20,7 @@ export const LIVE_TOOLS = [
     parameters: {
       type: 'object',
       properties: {
-        kind: { type: 'string', enum: ['retractil', 'frontal', 'recogepedidos'] },
+        kind: { type: 'string', enum: ['retractil', 'frontal', 'recogepedidos', 'transpaleta'] },
         status: { type: 'string', enum: ['idle', 'traveling', 'working', 'waiting', 'charging'] },
       },
       required: [],

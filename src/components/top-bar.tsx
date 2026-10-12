@@ -35,7 +35,7 @@ export function TopBar({ indicators }: TopBarProps) {
         ))}
       </div>
 
-      <div className="border-l border-line pl-4 font-mono text-sm text-accent">{formatClock(now)}</div>
+      <div className="border-l border-line pl-4 font-mono text-sm text-accent" data-testid="sim-clock">{now !== null ? formatClock(new Date(now)) : '--:--:--'}</div>
     </header>
   );
 }

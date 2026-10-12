@@ -1,16 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
-export function useNow(intervalMs = 1000) {
-  const [now, setNow] = useState(() => new Date());
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs]);
-
-  return now;
+/**
+ * Marca de tiempo actual (ms, redondeada al intervalo) o null en el render del servidor.
+ * Con useSyncExternalStore el servidor y el primer render del cliente coinciden (null).
+ */
+export function useNow(intervalMs = 1000): number | null {
+  return useSyncExternalStore(
+    (onChange) => {
+      const id = setInterval(onChange, intervalMs);
+      return () => clearInterval(id);
+    },
+    () => Math.floor(Date.now() / intervalMs) * intervalMs,
+    () => null,
+  );
 }
 
 export function formatClock(date: Date, withSeconds = true) {

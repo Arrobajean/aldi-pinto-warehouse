@@ -268,3 +268,44 @@ export function createPallet(height = 1.2, color = 0xa9875b) {
   pallet.position.y = height / 2;
   return pallet;
 }
+/** Transpaleta eléctrica con plataforma/asiento lateral (ESE): lleva pedidos preparados a los muelles. */
+export function createPalletTruck(): AnimatedMachine {
+  const g = group3();
+
+  const chassis = box(0.8, 0.4, 1.5, lambert(BLUE));
+  chassis.position.y = 0.3;
+  g.add(chassis);
+
+  // Asiento lateral y timón
+  const seat = box(0.45, 0.12, 0.45, lambert(DARK), -0.45, 0.62, -0.1);
+  g.add(seat);
+  const tiller = box(0.06, 0.06, 0.7, metalMat(), 0.05, 0.9, -0.55);
+  tiller.rotation.x = -0.35;
+  g.add(tiller);
+
+  const mast = new THREE.Group();
+  g.add(mast);
+  const mastPost = box(0.12, 1.0, 0.12, metalMat(), 0.25, 0.85, 0.55);
+  mast.add(mastPost);
+
+  const forks = new THREE.Group();
+  forks.position.set(0.25, 0.15, 0.2);
+  g.add(forks);
+  forks.add(box(0.07, 0.05, 1.3, metalMat(), -0.22, 0.03, 0.65));
+  forks.add(box(0.07, 0.05, 1.3, metalMat(), 0.22, 0.03, 0.65));
+
+  const palletGrip = new THREE.Group();
+  palletGrip.position.set(0.25, 0.14, 1.2);
+  forks.add(palletGrip);
+
+  const wheels: THREE.Object3D[] = [];
+  for (const [wx, wz] of [[-0.38, 0.5], [0.38, 0.5], [0, -0.6]] as const) {
+    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.1, 12), lambert(DARK));
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(wx, 0.11, wz);
+    g.add(wheel);
+    wheels.push(wheel);
+  }
+
+  return { group: g, nodes: { forks, mast, wheels, body: chassis, palletGrip } };
+}

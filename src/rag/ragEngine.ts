@@ -137,11 +137,12 @@ La plataforma de Pinto cuenta con 3 zonas térmicas independientes con telemetr�
 - Si supera los **-18.0ºC** por más de 20 minutos, entra en marcha el sistema compresor redundante de amoníaco/CO2 y se bloquean automáticamente las expediciones del lote.`;
   } else if (qLower.includes('carretilla') || qLower.includes('maquina') || qLower.includes('retractil') || qLower.includes('frontal') || qLower.includes('bateria')) {
     answerText = `### Parque de Maquinaria y Equipos de Manutención
-La flota de ALDI Pinto está compuesta por **46 unidades eléctricas de litio** con monitorización telemática:
+La flota de ALDI Pinto está compuesta por **41 unidades eléctricas Jungheinrich** con monitorización telemática:
 
-- **14 Carretillas Retráctiles Jungheinrich**: Especializadas en pasillo estrecho con mástil triplex para alturas de hasta 11.5 metros en racks de Seco y Frío. Velocidad autolimitada a 9 km/h.
+- **14 Carretillas Retráctiles Jungheinrich ETV/ETM 214-216**: Especializadas en pasillo estrecho con mástil triplex para alturas de hasta 11.5 metros en racks de Seco y Frío. Velocidad autolimitada a 9 km/h.
 - **8 Carretillas Frontales Contrapesadas Jungheinrich**: Con capacidad de 2.000 kg para la descarga rápida de trailers en muelles D-01 a D-03 y carga en D-04 a D-08.
-- **24 Transpaletas Eléctricas de Picking**: Operadas por preparadores de pedidos con sistema *Voice-Picking* (auricular y comando por voz).
+- **12 Recogepedidos Jungheinrich ECD 320**: Preparan pedidos en el suelo de picking; las referencias de reposición se toman de los niveles superiores o del rack contiguo.
+- **6 Transpaletas ESE Jungheinrich**: Llevan los pedidos preparados de la zona de preparación a la calle de cada muelle.
 
 > **Recarga:** La estación de baterías de 400 kW se alimenta en un 40% de la instalación solar fotovoltaica instalada en la cubierta del almacén.`;
   } else if (qLower.includes('muelle') || qLower.includes('camion') || qLower.includes('inbound') || qLower.includes('outbound')) {

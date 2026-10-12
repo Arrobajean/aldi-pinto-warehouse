@@ -5,9 +5,10 @@ import type { SimState } from '@/lib/sim/types';
 import type { GeofenceAlert } from '@/lib/rtls/geofences';
 
 const KIND_LABEL: Record<string, string> = {
-  retractil: 'Retráctil Jungheinrich',
+  retractil: 'Retráctil Jungheinrich ETV/ETM 214-216',
   frontal: 'Frontal Jungheinrich',
   recogepedidos: 'Recogepedidos Jungheinrich ECD 320',
+  transpaleta: 'Transpaleta ESE Jungheinrich',
 };
 
 interface MachineCardProps {

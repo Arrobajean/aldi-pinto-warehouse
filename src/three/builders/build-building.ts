@@ -84,6 +84,20 @@ function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
     }
   }
 
+  // Flejadoras automáticas: cuerpo de la máquina y entrada/salida marcadas.
+  for (const st of layout.strappers) {
+    const r = st.rect;
+    const cx = (r.xMin + r.xMax) / 2;
+    const cz = (r.zMin + r.zMax) / 2;
+    group.add(box(r.xMax - r.xMin, 1.4, r.zMax - r.zMin, lambert(0x3c4a63), cx, 0.7, cz));
+    group.add(box(r.xMax - r.xMin - 1, 0.1, 1.2, lambert(0xf39200), cx, 1.45, cz));
+    for (const port of [st.input, st.output]) {
+      const mark = plane(3, 2.4, lambert(0xffd23f, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), port.x, 0.045, port.z);
+      mark.receiveShadow = false;
+      group.add(mark);
+    }
+  }
+
   // Calles de pre-carga de cada muelle en Expedición.
   // polygonOffset: las marcas se pintan sobre el suelo sin z-fighting (parpadeo de texturas).
   const laneMat = lambert(0xf5c542, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });

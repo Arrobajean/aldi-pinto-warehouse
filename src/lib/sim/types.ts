@@ -6,10 +6,10 @@ export interface Point {
   z: number;
 }
 
-export type MachineKind = 'retractil' | 'frontal' | 'recogepedidos';
+export type MachineKind = 'retractil' | 'frontal' | 'recogepedidos' | 'transpaleta';
 export type MachineStatus = 'idle' | 'traveling' | 'working' | 'waiting' | 'charging';
 
-export type TaskKind = 'putaway' | 'replenish' | 'pick' | 'dock_shift' | 'charge';
+export type TaskKind = 'putaway' | 'replenish' | 'pick' | 'transfer' | 'dock_shift' | 'charge';
 
 export interface SimTask {
   id: string;
@@ -24,6 +24,10 @@ export interface SimTask {
   paletIds: string[];
   /** Segundos de simulación de trabajo una vez en destino. */
   duration: number;
+  /** Flejadora destino de la recogida (entrada, o salida si se flejará a mano). */
+  strapperId?: string;
+  /** El preparador flejará a mano en la zona de recolección (tren de flejado lleno). */
+  manual?: boolean;
   /** Muelles involucrados (p. ej. el de la calle de pre-carga). */
   dockId?: string;
   state: 'queued' | 'assigned' | 'transit' | 'working' | 'done';
@@ -198,6 +202,10 @@ export interface SimState {
   /** Posición de cada ubicación de rack (generada una vez). */
   readonly slotPos: Record<string, { x: number; y: number; z: number; zoneId: ZoneId; level: number }>;
   lanePallets: Record<string, string[]>;
+  /** Pedidos preparados en la zona de preparación, pendientes de llevar al muelle (transpaleta ESE). */
+  /** Flejadoras: cola de entrada, lote en proceso y lotes ya flejados (salida) para la transpaleta ESE. */
+  strappers: { id: string; queue: { dockId: string; paletIds: string[] }[]; current: { dockId: string; paletIds: string[]; doneAt: number } | null }[];
+  strapOut: { dockId: string; paletIds: string[]; strapperId: string }[];
 
   demand: SimDemand;
   stats: {

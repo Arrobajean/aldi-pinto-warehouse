@@ -37,6 +37,7 @@ const FLEET: { kind: Machine['kind']; base: number }[] = [
   { kind: 'retractil', base: 14 },
   { kind: 'frontal', base: 9 },
   { kind: 'recogepedidos', base: 12 },
+  { kind: 'transpaleta', base: 6 },
 ];
 
 function mulberry(seed: number) {
@@ -101,7 +102,8 @@ export function createInitialState(layout: WarehouseLayout, seed = 20260301): Si
   let mi = 0;
   for (const f of FLEET) {
     for (let i = 0; i < f.base; i++) {
-      const id = `${f.kind === 'retractil' ? 'R' : f.kind === 'frontal' ? 'F' : 'P'}-${String(i + 1).padStart(2, '0')}`;
+      const prefix = { retractil: 'R', frontal: 'F', recogepedidos: 'P', transpaleta: 'E' }[f.kind];
+      const id = `${prefix}-${String(i + 1).padStart(2, '0')}`;
       const pos =
         f.kind === 'retractil'
           ? { x: -115 + rng() * 30, z: -40 + rng() * 10 }
@@ -168,6 +170,8 @@ export function createInitialState(layout: WarehouseLayout, seed = 20260301): Si
     freeRack,
     slotPos,
     lanePallets: {},
+    strappers: layout.strappers.map((s) => ({ id: s.id, queue: [], current: null })),
+    strapOut: [],
     demand: generateDemand(layout, seed + 7),
     stats: { received: 0, stored: 0, picked: 0, prepared: 0, shipped: 0, trucksOut: 0 },
     seq: { truck: 0, palet: paletSeq, task: 0 },

@@ -12,6 +12,7 @@ import {
   type RackSlot,
   type Rect,
   type RoomSpot,
+  type Strapper,
   type WarehouseRoom,
   type SiteElements,
   type WarehouseLayout,
@@ -78,6 +79,24 @@ const RACK_ZONES: RackZoneSpec[] = [
     storageEnd: 125,
     levels: 6,
     segments: [{ zStart: -21, zEnd: 46 }],
+  },
+];
+
+/** Flejadora en el pasillo central, entre el almacén de picking y las calles de muelle. */
+const STRAPPERS: Strapper[] = [
+  {
+    id: 'FLJ-01',
+    rect: { xMin: -80, xMax: -60, zMin: 43, zMax: 48 },
+    input: { x: -82, z: 45.5 },
+    output: { x: -58, z: 45.5 },
+    secondsPerPallet: 40,
+  },
+  {
+    id: 'FLJ-02',
+    rect: { xMin: 60, xMax: 80, zMin: 43, zMax: 48 },
+    input: { x: 58, z: 45.5 },
+    output: { x: 82, z: 45.5 },
+    secondsPerPallet: 40,
   },
 ];
 
@@ -411,6 +430,7 @@ export function buildPintoLayout(): WarehouseLayout {
     docks,
     site,
     rooms,
+    strappers: STRAPPERS,
     indoorGraph: buildIndoorGraph(rackLines, crossAisles, docks, rooms),
     yardGraph: buildYardGraph(docks),
     stats,

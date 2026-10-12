@@ -42,17 +42,17 @@ Horario límite de entrega: Las tiendas deben recibir los productos frescos ante
     id: 'DOC-004',
     title: 'Flota de Maquinaria y Equipos de Manutención',
     category: 'maquinaria',
-    keywords: ['carretillas', 'retractiles', 'frontales', 'transpaletas', 'maquinas', 'bateria', 'flota', 'jungheinrich', 'ecd'],
-    content: `El centro dispone de una flota eléctrica monitorizada por telemetría IoT de 46 unidades:
-1. Carretillas Retráctiles Jungheinrich (14 unidades):
+    keywords: ['carretillas', 'retractiles', 'frontales', 'transpaletas', 'maquinas', 'bateria', 'flota', 'jungheinrich', 'ecd', 'ese', 'etv', 'etm'],
+    content: `El centro dispone de una flota eléctrica Jungheinrich monitorizada por telemetría IoT de 41 unidades:
+1. Carretillas Retráctiles Jungheinrich ETV/ETM 214-216 (14 unidades):
    - Mástil triplex de gran altura (hasta 11.5 metros).
    - Utilizadas exclusivamente en los pasillos de estanterías de Seco y Frío para ubicar y desubicar palets pesados.
    - Velocidad máxima autolimitada a 9 km/h en pasillo.
 2. Carretillas Frontales Contrapesadas Jungheinrich (8 unidades):
    - Capacidad nominal de 2.000 kg.
    - Operan en la playa de muelles para carga y descarga rápida de semirremolques y movimiento en playa de consolidación.
-3. Transpaletas Eléctricas de Preparación (24 unidades):
-   - Con plataforma abatible para preparadores de picking.
+3. Transpaletas eléctricas con plataforma/asiento lateral Jungheinrich ESE (6 unidades):
+   - Recogen los pedidos ya preparados en la zona de preparación y los llevan a la calle de su muelle.
    - Baterías de litio con carga de oportunidad rápida en descansos.
 Mantenimiento: Gestión inteligente de recarga con estación de baterías de 400 kW alimentada parcialmente por placas solares fotovoltaicas de la cubierta del almacén.`,
   },

@@ -126,8 +126,26 @@ export interface LayoutStats {
   aisleCount: number;
 }
 
+/** Plaza de una sala: de reposo (máquina aparcada) o de carga (cargador). */
+export interface RoomSpot {
+  id: string;
+  kind: 'reposo' | 'carga';
+  x: number;
+  z: number;
+}
+
+/** Sala de la nave donde se aparcan o recargan las máquinas. */
+export interface WarehouseRoom {
+  id: string;
+  kind: 'reposo' | 'carga';
+  label: string;
+  rect: Rect;
+  spots: RoomSpot[];
+}
+
 export interface WarehouseLayout {
   parcel: Rect;
+  rooms: WarehouseRoom[];
   roadWidth: number;
   building: { rect: Rect; freeHeight: number };
   zones: ZoneInfo[];

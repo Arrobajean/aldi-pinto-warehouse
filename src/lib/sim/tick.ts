@@ -11,6 +11,7 @@ import { emitEvent, nextTaskId } from '@/lib/sim/events';
 import { nextRandom } from '@/lib/sim/init';
 import { shiftAt, type SimState } from '@/lib/sim/types';
 import type { Machine, Pallet, SimTask, Truck } from '@/lib/sim/types';
+import type { RoomSpot } from '@/lib/layout/types';
 import { simpleDispatch, type DispatchPolicy } from '@/lib/sim/dispatch';
 
 export interface SimDeps {
@@ -48,8 +49,9 @@ function moveAlong(state: SimState, deps: SimDeps, m: Machine, dt: number): bool
 
   const target = m.route[0];
   const aisleId = aisleAt(deps, target.x, target.z);
-  if (aisleId && state.aisleLocks[aisleId] && state.aisleLocks[aisleId] !== m.id) {
-    // Pasillo en uso por otra máquina: esperar en la cabecera.
+  const holders = aisleId ? state.aisleLocks[aisleId] ?? [] : [];
+  if (aisleId && !holders.includes(m.id) && holders.length >= AISLE_CAPACITY) {
+    // Pasillo completo: esperar en la cabecera.
     m.status = 'waiting';
     if (!m.waitingOnce) {
       m.waitingOnce = true;
@@ -89,12 +91,9 @@ function moveAlong(state: SimState, deps: SimDeps, m: Machine, dt: number): bool
   m.speed = step / dt;
 
   // Reservar el pasillo del siguiente objetivo.
-  if (m.aisleReserved && (!aisleId || m.aisleReserved !== aisleId)) {
-    if (state.aisleLocks[m.aisleReserved] === m.id) delete state.aisleLocks[m.aisleReserved];
-    m.aisleReserved = null;
-  }
-  if (aisleId && !state.aisleLocks[aisleId]) {
-    state.aisleLocks[aisleId] = m.id;
+  if (m.aisleReserved && (!aisleId || m.aisleReserved !== aisleId)) releaseAisle(state, m);
+  if (aisleId && !m.aisleReserved) {
+    state.aisleLocks[aisleId] = [...(state.aisleLocks[aisleId] ?? []), m.id];
     m.aisleReserved = aisleId;
   }
   return false;
@@ -234,10 +233,86 @@ function liftLocFor(state: SimState, task: SimTask): string | null | undefined {
   return state.paletById[task.paletIds[0]]?.locId;
 }
 
+/** Máquinas que pueden circular a la vez por un pasillo de 4 m. */
+const AISLE_CAPACITY = 2;
+/** Batería por debajo de la cual la máquina va a cargar. */
+const CHARGE_THRESHOLD = 22;
+/** Batería a partir de la cual la carga termina. */
+const CHARGED_LEVEL = 99.5;
+
 /** Libera el pasillo reservado. Sin esto, una máquina parada en un pasillo bloquea a las demás. */
 function releaseAisle(state: SimState, m: Machine) {
-  if (m.aisleReserved && state.aisleLocks[m.aisleReserved] === m.id) delete state.aisleLocks[m.aisleReserved];
+  if (!m.aisleReserved) return;
+  const rest = (state.aisleLocks[m.aisleReserved] ?? []).filter((id) => id !== m.id);
+  if (rest.length > 0) state.aisleLocks[m.aisleReserved] = rest;
+  else delete state.aisleLocks[m.aisleReserved];
   m.aisleReserved = null;
+}
+
+/** Libera la plaza de sala de la máquina (al salir a trabajar o al terminar de cargar). */
+function releaseSpot(state: SimState, m: Machine) {
+  if (m.spot && state.spotOccupancy[m.spot] === m.id) delete state.spotOccupancy[m.spot];
+  m.spot = null;
+  m.mission = null;
+}
+
+function spotById(deps: SimDeps, id: string | null): RoomSpot | null {
+  if (!id) return null;
+  for (const room of deps.layout.rooms) for (const spot of room.spots) if (spot.id === id) return spot;
+  return null;
+}
+
+/** Plaza libre más cercana de un tipo. */
+function findFreeSpot(state: SimState, deps: SimDeps, kind: 'reposo' | 'carga', m: Machine): RoomSpot | null {
+  let best: RoomSpot | null = null;
+  let bestD = Infinity;
+  for (const room of deps.layout.rooms) {
+    for (const spot of room.spots) {
+      if (spot.kind !== kind || state.spotOccupancy[spot.id]) continue;
+      const d = (spot.x - m.pos.x) ** 2 + (spot.z - m.pos.z) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = spot;
+      }
+    }
+  }
+  return best;
+}
+
+/** Llegada a la plaza: cargar o quedar aparcada. */
+function arriveAtSpot(m: Machine) {
+  if (m.mission === 'charge') {
+    m.status = 'charging';
+  } else {
+    m.status = 'idle';
+    m.mission = null;
+  }
+}
+
+/**
+ * Comportamiento sin tarea: ir a una plaza de reposo o de carga, cargar y quedarse aparcada.
+ * Una máquina con batería baja pasa de la plaza de reposo a una de carga.
+ */
+function updateIdle(state: SimState, deps: SimDeps, m: Machine, dt: number) {
+  if (m.route.length > 0) {
+    moveAlong(state, deps, m, dt);
+    if (m.route.length === 0) arriveAtSpot(m);
+    return;
+  }
+  if (m.spot) {
+    const spot = spotById(deps, m.spot);
+    if (m.battery < CHARGE_THRESHOLD && spot?.kind === 'reposo') releaseSpot(state, m);
+    else return;
+  }
+  const kind: 'reposo' | 'carga' = m.battery < CHARGE_THRESHOLD ? 'carga' : 'reposo';
+  const spot = findFreeSpot(state, deps, kind, m);
+  if (!spot) return;
+  state.spotOccupancy[spot.id] = m.id;
+  m.spot = spot.id;
+  m.mission = kind === 'carga' ? 'charge' : 'park';
+  m.route = deps.indoor.pointsFor(deps.indoor.find(m.pos, `spot-${spot.id}`));
+  m.status = 'traveling';
+  if (m.route.length === 0) arriveAtSpot(m);
 }
 
 function updateMachine(state: SimState, deps: SimDeps, m: Machine, dt: number) {
@@ -248,11 +323,14 @@ function updateMachine(state: SimState, deps: SimDeps, m: Machine, dt: number) {
   const liftDiff = m.liftTarget - m.liftHeight;
   m.liftHeight += Math.sign(liftDiff) * Math.min(Math.abs(liftDiff), LIFT_SPEED * dt);
 
-  // Batería y recarga.
+  // Batería y recarga: la máquina permanece en su plaza de carga.
   if (m.status === 'charging') {
     m.battery = Math.min(100, m.battery + dt * 0.8);
     m.route = [];
-    if (m.battery >= 99.5) m.status = 'idle';
+    if (m.battery >= CHARGED_LEVEL) {
+      m.status = 'idle';
+      releaseSpot(state, m);
+    }
     return;
   }
   m.battery = Math.max(0, m.battery - dt * 0.0028);
@@ -265,19 +343,14 @@ function updateMachine(state: SimState, deps: SimDeps, m: Machine, dt: number) {
     }
     const assigned = deps.dispatch.assignTask(state, m);
     if (assigned) {
+      // Sale de la plaza de sala (o abandona el trayecto hacia ella) para trabajar.
+      releaseSpot(state, m);
+      m.route = [];
       const task = state.tasks.find((t) => t.id === m.taskId);
       if (task) beginTask(state, deps, m, task);
       return;
     }
-    if (m.battery < 22) {
-      const chargePoint = { x: -115, z: -58 };
-      if (Math.hypot(chargePoint.x - m.pos.x, chargePoint.z - m.pos.z) < 3) {
-        m.status = 'charging';
-        return;
-      }
-      m.status = 'traveling';
-      m.route = deps.indoor.pointsFor(deps.indoor.find(m.pos, deps.indoor.nearestTo(chargePoint)));
-    }
+    updateIdle(state, deps, m, dt);
     return;
   }
 

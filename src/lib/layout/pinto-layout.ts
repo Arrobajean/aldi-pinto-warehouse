@@ -11,6 +11,8 @@ import {
   type RackLine,
   type RackSlot,
   type Rect,
+  type RoomSpot,
+  type WarehouseRoom,
   type SiteElements,
   type WarehouseLayout,
   type ZoneInfo,
@@ -79,10 +81,31 @@ const RACK_ZONES: RackZoneSpec[] = [
   },
 ];
 
+/** Salas de carga y de reposo en la franja oeste de la nave (libre de racks). */
+function buildRooms(): WarehouseRoom[] {
+  const carga: RoomSpot[] = [-122, -119, -116, -113, -110, -107].map((x, i) => ({
+    id: `CAR-${String(i + 1).padStart(2, '0')}`,
+    kind: 'carga' as const,
+    x,
+    z: -70,
+  }));
+  const reposo: RoomSpot[] = [];
+  // 6 filas de 6 plazas: 36 máquinas aparcadas (la flota tiene 35).
+  for (const z of [-59, -56, -53, -50, -47, -44]) {
+    for (const x of [-122, -119, -116, -113, -110, -107]) {
+      reposo.push({ id: `REP-${String(reposo.length + 1).padStart(2, '0')}`, kind: 'reposo', x, z });
+    }
+  }
+  return [
+    { id: 'sala-carga', kind: 'carga', label: 'Sala de carga', rect: { xMin: -125, xMax: -105, zMin: -80, zMax: -62 }, spots: carga },
+    { id: 'sala-reposo', kind: 'reposo', label: 'Sala de reposo', rect: { xMin: -125, xMax: -105, zMin: -62, zMax: -40 }, spots: reposo },
+  ];
+}
+
 function zones(): ZoneInfo[] {
   return [
     { id: 'seco', label: 'Seco', color: '#c9ced6', temp: '16–22 ºC', rect: { xMin: -125, xMax: 30, zMin: -80, zMax: 50 }, storage: 'rack', levels: 7, rackSegments: RACK_ZONES[0].segments },
-    { id: 'carga_baterias', label: 'Carga de baterías', color: '#9aa3b5', temp: '—', rect: { xMin: -125, xMax: -105, zMin: -80, zMax: -40 }, storage: 'none' },
+    { id: 'carga_baterias', label: 'Sala de carga', color: '#9aa3b5', temp: '—', rect: { xMin: -125, xMax: -105, zMin: -80, zMax: -62 }, storage: 'none' },
     { id: 'frio', label: 'Frío', color: '#7cc4f0', temp: '+2/+4 ºC', rect: { xMin: 30, xMax: 125, zMin: -80, zMax: -25 }, storage: 'rack', levels: 5, rackSegments: RACK_ZONES[1].segments },
     { id: 'fyv', label: 'Frutas y verduras', color: '#8fd694', temp: '+6 ºC · 85–90 % HR', rect: { xMin: 30, xMax: 70, zMin: -25, zMax: 50 }, storage: 'floor' },
     { id: 'congelado', label: 'Congelado', color: '#b9e3ff', temp: '−22/−25 ºC', rect: { xMin: 70, xMax: 125, zMin: -25, zMax: 50 }, storage: 'rack', levels: 6, rackSegments: RACK_ZONES[2].segments },
@@ -217,7 +240,7 @@ function buildFloorPallets(): { x: number; z: number }[] {
   return palets;
 }
 
-function buildIndoorGraph(rackLines: RackLine[], crossAisles: Rect[], docks: Dock[]): Graph {
+function buildIndoorGraph(rackLines: RackLine[], crossAisles: Rect[], docks: Dock[], rooms: WarehouseRoom[]): Graph {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
   const nodeIndex = new Map<string, number>();
@@ -255,6 +278,26 @@ function buildIndoorGraph(rackLines: RackLine[], crossAisles: Rect[], docks: Doc
       }
     }
     addEdge(`aisle-${line.aisleId}-N`, `aisle-${line.aisleId}-S`);
+  }
+
+  // Salas de reposo y carga: un nodo por plaza, unidos a un vestíbulo que da a un pasillo.
+  const hub = { x: -115, z: -61 };
+  const entrance = { x: -104, z: -61 };
+  addNode('room-hub', hub.x, hub.z);
+  addNode('room-entrance', entrance.x, entrance.z);
+  addEdge('room-hub', 'room-entrance');
+  let nearest = { id: '', d: Infinity };
+  for (const n of nodes) {
+    if (!n.id.startsWith('aisle-') || !n.id.endsWith('-N')) continue;
+    const d = (n.x - entrance.x) ** 2 + (n.z - entrance.z) ** 2;
+    if (d < nearest.d) nearest = { id: n.id, d };
+  }
+  if (nearest.id) addEdge('room-entrance', nearest.id);
+  for (const room of rooms) {
+    for (const spot of room.spots) {
+      addNode(`spot-${spot.id}`, spot.x, spot.z);
+      addEdge(`spot-${spot.id}`, 'room-hub');
+    }
   }
 
   // Spine frontal al sur de los racks, que conecta todos los pasillos con Expedición.
@@ -330,6 +373,7 @@ function buildYardGraph(docks: Dock[]): Graph {
 }
 
 export function buildPintoLayout(): WarehouseLayout {
+  const rooms = buildRooms();
   const { aisles, rackLines, crossAisles } = buildRackLines();
   const docks = buildDocks();
   const site = buildSite();
@@ -366,7 +410,8 @@ export function buildPintoLayout(): WarehouseLayout {
     crossAisles,
     docks,
     site,
-    indoorGraph: buildIndoorGraph(rackLines, crossAisles, docks),
+    rooms,
+    indoorGraph: buildIndoorGraph(rackLines, crossAisles, docks, rooms),
     yardGraph: buildYardGraph(docks),
     stats,
   };

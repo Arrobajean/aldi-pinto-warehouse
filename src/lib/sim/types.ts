@@ -185,7 +185,10 @@ export interface SimState {
   dockStates: DockState[];
   events: SimEvent[];
 
-  aisleLocks: Record<string, string>;
+  /** Máquinas que circulan por cada pasillo (máximo AISLE_CAPACITY). */
+  aisleLocks: Record<string, string[]>;
+  /** Plaza de sala (reposo o carga) → máquina que la ocupa. */
+  spotOccupancy: Record<string, string>;
   rackOccupancy: Record<string, string>;
   /** Huecos de rack cuyo contenido ha cambiado desde que la escena lo leyó. */
   rackDirty: string[];
@@ -242,6 +245,10 @@ export interface Machine {
   liftTarget: number;
   /** Pasillo reservado (id) mientras se desplaza por él. */
   aisleReserved: string | null;
+  /** Plaza de sala asignada (reposo o carga). */
+  spot: string | null;
+  /** Motivo de la ruta hacia la plaza: aparcar o cargar. */
+  mission: 'park' | 'charge' | null;
   hoursUsed: number;
   workingRemaining: number;
   carriedPalets: string[];

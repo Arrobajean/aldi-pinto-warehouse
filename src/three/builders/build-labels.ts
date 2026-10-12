@@ -50,6 +50,7 @@ export function buildLabels(layout: WarehouseLayout): THREE.Group {
   ];
 
   for (const zl of zoneLabels) {
+    if (zl.id === 'carga_baterias') continue; // la sala de carga lleva su propia etiqueta
     const zone = layout.zones.find((z) => z.id === zl.id);
     if (!zone) continue;
     const w = zone.rect.xMax - zone.rect.xMin;
@@ -57,6 +58,13 @@ export function buildLabels(layout: WarehouseLayout): THREE.Group {
     const cz = (zone.rect.zMin + zone.rect.zMax) / 2;
     const planeW = Math.min(w - 10, 40);
     group.add(groundLabel(`${zl.label} — ${zl.temp}`, cx, cz, planeW, 3.4, { font: '700 42px Plus Jakarta Sans, sans-serif', color: '#1c2e4a' }));
+  }
+
+  for (const room of layout.rooms) {
+    const r = room.rect;
+    const cx = (r.xMin + r.xMax) / 2;
+    const cz = room.kind === 'carga' ? (r.zMin + r.zMax) / 2 : r.zMax - 2.5;
+    group.add(groundLabel(room.label, cx, cz, 18, 2.4, { font: '700 36px Plus Jakarta Sans, sans-serif', color: '#1c2e4a' }));
   }
 
   // Número de pasillo en cada cabecera (sur del pasillo, frente a Expedición).

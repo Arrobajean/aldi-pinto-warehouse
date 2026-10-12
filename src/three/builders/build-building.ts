@@ -61,6 +61,29 @@ function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
     group.add(floor);
   }
 
+  // Salas de carga y de reposo: suelo propio y plazas marcadas (cargadores en la sala de carga).
+  for (const room of layout.rooms) {
+    const r = room.rect;
+    const roomColor = room.kind === 'carga' ? 0xffd23f : 0xbcd9ee;
+    const roomMat = lambert(roomColor, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+    const floor = plane(r.xMax - r.xMin, r.zMax - r.zMin, roomMat, (r.xMin + r.xMax) / 2, 0.035, (r.zMin + r.zMax) / 2);
+    floor.receiveShadow = false;
+    floor.name = `room-${room.id}`;
+    group.add(floor);
+
+    const spotMat = lambert(room.kind === 'carga' ? 0xffe98a : 0xe9f3fb, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    for (const spot of room.spots) {
+      const marker = plane(2.2, room.kind === 'carga' ? 2.2 : 2.6, spotMat, spot.x, 0.045, spot.z);
+      marker.receiveShadow = false;
+      group.add(marker);
+      if (room.kind === 'carga') {
+        // Cargador: columna con el cable (volumen simple).
+        const charger = box(0.9, 1.4, 0.5, lambert(0x2a3550), spot.x, 0.7, spot.z - 0.9);
+        group.add(charger);
+      }
+    }
+  }
+
   // Calles de pre-carga de cada muelle en Expedición.
   // polygonOffset: las marcas se pintan sobre el suelo sin z-fighting (parpadeo de texturas).
   const laneMat = lambert(0xf5c542, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });

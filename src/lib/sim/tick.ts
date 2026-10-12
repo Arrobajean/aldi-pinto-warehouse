@@ -102,6 +102,7 @@ function moveAlong(state: SimState, deps: SimDeps, m: Machine, dt: number): bool
 
 function beginTask(state: SimState, deps: SimDeps, m: Machine, task: SimTask) {
   task.state = 'transit';
+  m.liftTarget = 0;
   m.carriedPalets = [...task.paletIds];
   m.hasPalet = task.paletIds.length > 0 && task.kind !== 'pick';
   m.status = 'traveling';
@@ -121,6 +122,7 @@ function beginTask(state: SimState, deps: SimDeps, m: Machine, task: SimTask) {
 }
 
 function completeTask(state: SimState, deps: SimDeps, m: Machine, task: SimTask) {
+  m.liftTarget = 0;
   task.state = 'done';
   const dock = task.dockId ? deps.layout.docks.find((d) => d.id === task.dockId) : undefined;
 
@@ -133,6 +135,7 @@ function completeTask(state: SimState, deps: SimDeps, m: Machine, task: SimTask)
       p.pos = { x: slot.x, z: slot.z };
       p.height = 1.0 + nextRandom(state) * 0.5;
       state.rackOccupancy[task.toLocId] = p.id;
+      state.rackDirty.push(task.toLocId);
       state.freeRack = state.freeRack.filter((l) => l !== task.toLocId);
       if (slot.zoneId === 'seco' || slot.zoneId === 'frio' || slot.zoneId === 'congelado') {
         state.storedByZone[slot.zoneId]++;
@@ -145,6 +148,7 @@ function completeTask(state: SimState, deps: SimDeps, m: Machine, task: SimTask)
     if (p && state.rackOccupancy[task.fromLocId] === p.id) {
       delete state.rackOccupancy[task.fromLocId];
       state.rackOccupancy[task.toLocId] = p.id;
+      state.rackDirty.push(task.fromLocId, task.toLocId);
       p.state = 'picking';
       p.locId = task.toLocId;
       const slot = state.slotPos[task.toLocId];
@@ -165,6 +169,7 @@ function completeTask(state: SimState, deps: SimDeps, m: Machine, task: SimTask)
       if (!p) continue;
       if (p.locId && state.rackOccupancy[p.locId] === p.id) {
         delete state.rackOccupancy[p.locId];
+        state.rackDirty.push(p.locId);
         state.freeRack.push(p.locId);
         const slot = state.slotPos[p.locId];
         if (slot.zoneId === 'seco' || slot.zoneId === 'frio' || slot.zoneId === 'congelado') {
@@ -210,6 +215,25 @@ function completeTask(state: SimState, deps: SimDeps, m: Machine, task: SimTask)
   m.route = [];
 }
 
+/** Altura de un nivel de rack en metros (ver LEVEL_HEIGHT del plano). */
+const LEVEL_HEIGHT = 1.6;
+/** Velocidad de subida/bajada de la horquilla, en m/s. */
+const LIFT_SPEED = 0.6;
+
+/** Altura del hueco (0 si es suelo o no existe). */
+function slotHeight(state: SimState, locId: string | null | undefined): number {
+  if (!locId) return 0;
+  const slot = state.slotPos[locId];
+  return slot ? slot.level * LEVEL_HEIGHT : 0;
+}
+
+/** Hueco que determina la altura de trabajo de una tarea. */
+function liftLocFor(state: SimState, task: SimTask): string | null | undefined {
+  if (task.kind === 'putaway') return task.toLocId;
+  if (task.kind === 'replenish') return task.fromLocId;
+  return state.paletById[task.paletIds[0]]?.locId;
+}
+
 /** Libera el pasillo reservado. Sin esto, una máquina parada en un pasillo bloquea a las demás. */
 function releaseAisle(state: SimState, m: Machine) {
   if (m.aisleReserved && state.aisleLocks[m.aisleReserved] === m.id) delete state.aisleLocks[m.aisleReserved];
@@ -219,6 +243,10 @@ function releaseAisle(state: SimState, m: Machine) {
 function updateMachine(state: SimState, deps: SimDeps, m: Machine, dt: number) {
   // Solo se mantiene la reserva mientras la máquina se desplaza.
   if (m.status !== 'traveling' && m.status !== 'waiting') releaseAisle(state, m);
+
+  // La horquilla sube o baja hacia su altura objetivo con velocidad limitada.
+  const liftDiff = m.liftTarget - m.liftHeight;
+  m.liftHeight += Math.sign(liftDiff) * Math.min(Math.abs(liftDiff), LIFT_SPEED * dt);
 
   // Batería y recarga.
   if (m.status === 'charging') {
@@ -263,6 +291,7 @@ function updateMachine(state: SimState, deps: SimDeps, m: Machine, dt: number) {
     const arrived = moveAlong(state, deps, m, dt);
     if (arrived) {
       m.status = 'working';
+      m.liftTarget = slotHeight(state, liftLocFor(state, task));
       task.state = 'working';
       m.workingRemaining = task.duration;
     }

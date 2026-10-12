@@ -19,7 +19,7 @@ export function useSimulation(sceneRef: MutableRefObject<WarehouseScene | null>)
     return createInitialState(layout);
   }, [layout, epoch]);
   const [uiState, setUiState] = useState<SimState>(simState);
-  const [speed, setSpeed] = useState<SimSpeed>(60);
+  const [speed, setSpeed] = useState<SimSpeed>(1); // tiempo real por defecto
   const [running, setRunning] = useState(true);
 
   const speedRef = useRef(speed);

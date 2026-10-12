@@ -24,7 +24,7 @@ const BUILDING_DEPTH = 160; // z
 const FREE_HEIGHT = 13;
 
 const RACK_DEPTH = 1.1;
-const AISLE_WIDTH = 3.2;
+const AISLE_WIDTH = 4.0; // pasillo legible en vista isométrica (antes 3,2 m)
 const BACK_GAP = 0.2;
 const PITCH = RACK_DEPTH * 2 + BACK_GAP + AISLE_WIDTH; // 5,6 m
 const MODULE = 2.7; // frente de módulo: 3 palets de 0,8 m

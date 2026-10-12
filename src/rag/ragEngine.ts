@@ -139,8 +139,8 @@ La plataforma de Pinto cuenta con 3 zonas térmicas independientes con telemetr�
     answerText = `### Parque de Maquinaria y Equipos de Manutención
 La flota de ALDI Pinto está compuesta por **46 unidades eléctricas de litio** con monitorización telemática:
 
-- **14 Carretillas Retráctiles (Crown RM / Jungheinrich ETV)**: Especializadas en pasillo estrecho con mástil triplex para alturas de hasta 11.5 metros en racks de Seco y Frío. Velocidad autolimitada a 9 km/h.
-- **8 Carretillas Frontales Contrapesadas (Toyota Traigo 48V / Linde E20)**: Con capacidad de 2.000 kg para la descarga rápida de trailers en muelles D-01 a D-03 y carga en D-04 a D-08.
+- **14 Carretillas Retráctiles Jungheinrich**: Especializadas en pasillo estrecho con mástil triplex para alturas de hasta 11.5 metros en racks de Seco y Frío. Velocidad autolimitada a 9 km/h.
+- **8 Carretillas Frontales Contrapesadas Jungheinrich**: Con capacidad de 2.000 kg para la descarga rápida de trailers en muelles D-01 a D-03 y carga en D-04 a D-08.
 - **24 Transpaletas Eléctricas de Picking**: Operadas por preparadores de pedidos con sistema *Voice-Picking* (auricular y comando por voz).
 
 > **Recarga:** La estación de baterías de 400 kW se alimenta en un 40% de la instalación solar fotovoltaica instalada en la cubierta del almacén.`;

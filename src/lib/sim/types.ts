@@ -187,6 +187,8 @@ export interface SimState {
 
   aisleLocks: Record<string, string>;
   rackOccupancy: Record<string, string>;
+  /** Huecos de rack cuyo contenido ha cambiado desde que la escena lo leyó. */
+  rackDirty: string[];
   freeRack: string[];
   /** Índice de palets por id (objeto plano, serializable). */
   paletById: Record<string, Pallet>;
@@ -236,6 +238,8 @@ export interface Machine {
   speed: number;
   hasPalet: boolean;
   liftHeight: number;
+  /** Altura a la que debe estar la horquilla (nivel del hueco de trabajo). */
+  liftTarget: number;
   /** Pasillo reservado (id) mientras se desplaza por él. */
   aisleReserved: string | null;
   hoursUsed: number;

@@ -52,6 +52,8 @@ function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
     const mat = lambert(zoneColors[zone.id] ?? 0xbbbbbb);
     mat.transparent = true;
     mat.opacity = ZONE_FLOOR_ALPHA;
+    // El suelo semitransparente no escribe profundidad: evita parpadeos con las marcas de encima.
+    mat.depthWrite = false;
     const floor = plane(w, d, mat, cx, 0.02, cz);
     floor.name = `floor-${zone.id}`;
     floor.userData.zoneId = zone.id;
@@ -60,18 +62,21 @@ function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
   }
 
   // Calles de pre-carga de cada muelle en Expedición.
-  const laneMat = lambert(0xf5c542);
+  // polygonOffset: las marcas se pintan sobre el suelo sin z-fighting (parpadeo de texturas).
+  const laneMat = lambert(0xf5c542, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   for (const dock of layout.docks) {
-    const lane = plane(dock.laneRect.xMax - dock.laneRect.xMin, dock.laneRect.zMax - dock.laneRect.zMin, laneMat, dock.x, 0.025, (dock.laneRect.zMin + dock.laneRect.zMax) / 2);
+    const lane = plane(dock.laneRect.xMax - dock.laneRect.xMin, dock.laneRect.zMax - dock.laneRect.zMin, laneMat, dock.x, 0.04, (dock.laneRect.zMin + dock.laneRect.zMax) / 2);
+    lane.receiveShadow = false;
     lane.rotation.x = -Math.PI / 2;
     lane.userData.dockId = dock.id;
     group.add(lane);
   }
 
   // Pasillos transversales: pintura más clara.
-  const crossMat = lambert(0xe7ebf2);
+  const crossMat = lambert(0xe7ebf2, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
   for (const ca of layout.crossAisles) {
-    const a = plane(ca.xMax - ca.xMin, ca.zMax - ca.zMin, crossMat, (ca.xMin + ca.xMax) / 2, 0.022, (ca.zMin + ca.zMax) / 2);
+    const a = plane(ca.xMax - ca.xMin, ca.zMax - ca.zMin, crossMat, (ca.xMin + ca.xMax) / 2, 0.03, (ca.zMin + ca.zMax) / 2);
+    a.receiveShadow = false;
     group.add(a);
   }
 

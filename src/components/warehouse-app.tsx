@@ -12,8 +12,10 @@ import { EventFeed } from '@/components/event-feed';
 import { useWarehouseScene } from '@/hooks/use-warehouse-scene';
 import { useSimulation } from '@/hooks/use-simulation';
 import { useRtls } from '@/hooks/use-rtls';
+import { useStock } from '@/hooks/use-stock';
 import { MachineCard } from '@/components/machine-card';
 import { EntityLabel } from '@/components/entity-label';
+import { StockPanel } from '@/components/stock-panel';
 
 const Viewport = dynamic(() => import('@/components/viewport').then((m) => m.Viewport), {
   ssr: false,
@@ -25,6 +27,7 @@ export function WarehouseApp() {
   const sim = useSimulation(w.sceneRef);
   const labelRef = useRef<HTMLDivElement | null>(null);
   const rtls = useRtls(w.sceneRef, labelRef);
+  const stock = useStock(w.sceneRef, sim.state);
   const [followingId, setFollowingId] = useState<string | null>(null);
   const selected = w.zones.find((z) => z.id === w.selectedZone) ?? null;
 
@@ -55,6 +58,7 @@ export function WarehouseApp() {
           onHoverZone={() => {}}
           onSelectEntity={(kind, id) => rtls.setSelected({ kind, id })}
           onHoverEntity={(kind, id) => rtls.setHover(kind === 'machine' || kind === 'truck' ? { kind, id } : null)}
+          onSelectStock={(selection) => stock.setSelection(selection)}
         />
 
         <SidePanel
@@ -63,6 +67,17 @@ export function WarehouseApp() {
           layers={w.layers}
           onFocusZone={(id) => w.acciones.focusZone(id)}
           onToggleLayer={(id) => w.acciones.toggleLayer(id)}
+        />
+
+        <StockPanel
+          mode={stock.mode}
+          onMode={stock.setMode}
+          query={stock.query}
+          onQuery={stock.setQuery}
+          onSearch={stock.search}
+          selection={stock.selection}
+          onCloseSelection={() => stock.setSelection(null)}
+          alerts={stock.alerts}
         />
 
         {rtls.selected && sim.state ? (

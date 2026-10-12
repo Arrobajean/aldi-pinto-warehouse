@@ -81,6 +81,10 @@ export function createInitialState(layout: WarehouseLayout, seed = 20260301): Si
       locId: slot.locationId,
       pos: { x: slot.x, z: slot.z },
       height: 1.0 + rng() * 0.5,
+      receivedDay: Math.floor(rng() * 60),
+      daysToExpiry: 5 + Math.floor(rng() * 120),
+      batch: `L${String(24000 + Math.floor(rng() * 900)).padStart(5, '0')}`,
+      quantity: 40 + Math.floor(rng() * 60),
     };
     pallets.push(palet);
     paletById[id] = palet;

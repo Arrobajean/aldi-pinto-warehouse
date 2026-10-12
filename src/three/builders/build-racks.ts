@@ -6,15 +6,34 @@ import { standard } from '@/three/builders/utils';
 const LEVEL_HEIGHT = 1.6;
 const MODULE = 2.7;
 
+export interface RackPaletMeta {
+  locId: string;
+  x: number;
+  y: number;
+  z: number;
+  sku: string;
+  temp: 'dry' | 'cool' | 'frozen';
+  expiryDays: number;
+}
+
+export interface RacksModel {
+  group: THREE.Group;
+  paletMesh: THREE.InstancedMesh;
+  floorMesh: THREE.InstancedMesh;
+  emptyMesh: THREE.InstancedMesh;
+  byIndex: RackPaletMeta[];
+  emptyIndex: string[];
+}
+
 /** Paleta de color de familia de producto para la ocupación inicial. */
 const FAMILY_COLORS = [
-  0xa9875b, // madera (conservas / bazar)
-  0xe0a96d, // cartón (seco)
-  0xc7b13a, // oil/aceite
-  0x7fb4e8, // frío
-  0x8fd6ff, // congelado
-  0x8fd694, // f&v
-  0xb48ad9, // bazar
+  0xa9875b,
+  0xe0a96d,
+  0xc7b13a,
+  0x7fb4e8,
+  0x8fd6ff,
+  0x8fd694,
+  0xb48ad9,
 ];
 
 function instanced(geom: THREE.BufferGeometry, material: THREE.Material, count: number) {
@@ -26,7 +45,7 @@ function instanced(geom: THREE.BufferGeometry, material: THREE.Material, count: 
   return mesh;
 }
 
-export function buildRacks(layout: WarehouseLayout): THREE.Group {
+export function buildRacks(layout: WarehouseLayout): RacksModel {
   const group = new THREE.Group();
   const rng = seededRandom();
 
@@ -90,30 +109,51 @@ export function buildRacks(layout: WarehouseLayout): THREE.Group {
   beamMesh.name = 'beams';
   group.add(beamMesh);
 
-  // --- Palets de las estanterías (ocupación ~85 %, color por familia) ---
+  // --- Palets y huecos vacíos en una sola pasada (misma semilla) ---
   const palletMat = standard(0xffffff, { roughness: 0.8, metalness: 0 });
   const palletColor = new THREE.Color();
-  const maxPallets = layout.stats.racksFilled;
-  const palletMesh = instanced(palletGeo, palletMat, maxPallets);
+  const palletMesh = instanced(palletGeo, palletMat, layout.stats.racksFilled);
+  const emptyIdxPos: { locId: string; x: number; y: number; z: number }[] = [];
+  const byIndex: RackPaletMeta[] = [];
 
   let palletIndex = 0;
   forEachRackSlot(layout, (slot) => {
-    if (rng() > 0.85) return;
     const h = 1.0 + rng() * 0.5;
-    const familyIdx = Math.floor(rng() * FAMILY_COLORS.length);
-    postPos.set(slot.x, slot.y + h / 2, slot.z);
-    postScale.set(1.2, h, 0.8);
-    postMatrix.compose(postPos, postQuat, postScale);
-    palletMesh.setMatrixAt(palletIndex, postMatrix);
-    palletColor.setHex(FAMILY_COLORS[familyIdx]);
-    palletMesh.setColorAt(palletIndex, palletColor);
-    palletIndex++;
+    if (rng() <= 0.85) {
+      const sku = `SKU-${1000 + Math.floor(rng() * 1800)}`;
+      const temp: 'dry' | 'cool' | 'frozen' = slot.zoneId === 'frio' ? 'cool' : slot.zoneId === 'congelado' ? 'frozen' : 'dry';
+      postPos.set(slot.x, slot.y + h / 2, slot.z);
+      postScale.set(1.2, h, 0.8);
+      postMatrix.compose(postPos, postQuat, postScale);
+      palletMesh.setMatrixAt(palletIndex, postMatrix);
+      palletColor.setHex(FAMILY_COLORS[Math.floor(rng() * FAMILY_COLORS.length)]);
+      palletMesh.setColorAt(palletIndex, palletColor);
+      byIndex[palletIndex] = { locId: slot.locationId, x: slot.x, y: slot.y, z: slot.z, sku, temp, expiryDays: 5 + Math.floor(rng() * 120) };
+      palletIndex++;
+    } else {
+      emptyIdxPos.push({ locId: slot.locationId, x: slot.x, y: slot.y, z: slot.z });
+    }
   });
   palletMesh.instanceMatrix.needsUpdate = true;
   if (palletMesh.instanceColor) palletMesh.instanceColor.needsUpdate = true;
   palletMesh.name = 'pallets';
   group.add(palletMesh);
   group.userData.palletMesh = palletMesh;
+
+  // Marcadores de huecos vacíos (nivel 0) para el modo "ubicación vacía".
+  const emptyMat = standard(0x2ecc71, { emissive: 0x2ecc71, emissiveIntensity: 0.4, roughness: 0.7 });
+  const emptyMesh = instanced(new THREE.BoxGeometry(0.9, 0.06, 0.55), emptyMat, emptyIdxPos.length);
+  emptyIdxPos.forEach((e, i) => {
+    postPos.set(e.x, e.y + 0.03, e.z);
+    postScale.set(1, 1, 1);
+    postMatrix.compose(postPos, postQuat, postScale);
+    emptyMesh.setMatrixAt(i, postMatrix);
+  });
+  emptyMesh.instanceMatrix.needsUpdate = true;
+  emptyMesh.name = 'empty-slots';
+  emptyMesh.visible = false;
+  group.add(emptyMesh);
+  const emptyIndex = emptyIdxPos.map((e) => e.locId);
 
   // --- Palets en el suelo de FyV (calles abiertas) ---
   const floor = floorPalets();
@@ -132,5 +172,5 @@ export function buildRacks(layout: WarehouseLayout): THREE.Group {
   floorMesh.name = 'pallets';
   group.add(floorMesh);
 
-  return group;
+  return { group, paletMesh: palletMesh, floorMesh, emptyMesh, byIndex, emptyIndex };
 }

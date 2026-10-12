@@ -1,4 +1,5 @@
 import type { Dock, WarehouseLayout } from '@/lib/layout/types';
+import { articleForSku } from '@/lib/stock/catalog';
 import {
   KEEP_OUT,
   dockInteriorPoint,
@@ -298,6 +299,10 @@ function createPalet(state: SimState, temp: Pallet['temp'], destStoreId?: string
     pos: { ...KEEP_OUT },
     height: 1.2,
     destStoreId,
+    receivedDay: 0,
+    daysToExpiry: 30 + nextRandom(state) % 90,
+    batch: `L${String(24000 + (state.seq.palet % 900)).padStart(5, '0')}`,
+    quantity: 40 + (state.seq.palet % 60),
   };
   return p;
 }
@@ -555,7 +560,12 @@ function generateWork(state: SimState, deps: SimDeps) {
       return slot && slot.zoneId === zone && slot.level >= 1;
     });
     if (candidates.length === 0) continue;
-    const destLoc = candidates[(state.seq.task + state.seq.palet) % candidates.length];
+    // Los artículos A se ubican cerca de Expedición (z mayor).
+    const article = p.sku ? articleForSku(p.sku).rotation === 'A' : false;
+    const pickOne = [...candidates].sort(
+      (a, b) => (article ? state.slotPos[b].z - state.slotPos[a].z : state.slotPos[a].z - state.slotPos[b].z),
+    )[0]!;
+    const destLoc = pickOne;
     const slotFrom = state.slotPos[destLoc];
     state.stagingQueue = state.stagingQueue.filter((x) => x !== pid);
     state.tasks.push({

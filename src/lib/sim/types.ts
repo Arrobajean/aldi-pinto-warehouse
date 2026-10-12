@@ -73,6 +73,14 @@ export interface Pallet {
   truckId?: string;
   destStoreId?: string;
   dockId?: string;
+  /** Fecha de entrada (días desde el ciclo). */
+  receivedDay: number;
+  /** Caducidad en días desde el ciclo (0 = ya caducado). */
+  daysToExpiry: number;
+  /** Lote de fabricación. */
+  batch: string;
+  /** Unidades del artículo en el palet. */
+  quantity: number;
 }
 
 export interface DockState {

@@ -10,16 +10,30 @@ import { RtlsLayers } from '@/three/rtls-layers';
 import type { SmoothedTrack } from '@/lib/rtls/types';
 import { buildBuilding, type WallMesh } from '@/three/builders/build-building';
 import { buildSite } from '@/three/builders/build-site';
-import { buildRacks } from '@/three/builders/build-racks';
+import { buildRacks, type RacksModel } from '@/three/builders/build-racks';
 import { buildLabels } from '@/three/builders/build-labels';
+import { buildSlotPositions } from '@/lib/sim/positions';
+import { colorForStock, type StockColorMode } from '@/lib/stock/colors';
+import { articleForSku } from '@/lib/stock/catalog';
 
 export type SceneLayerId = 'racks' | 'pallets' | 'labels' | 'machines' | 'trucks' | 'exterior' | 'shadows';
+
+export interface StockSelection {
+  locId: string;
+  empty: boolean;
+  sku?: string;
+  expiryDays?: number;
+  x: number;
+  y: number;
+  z: number;
+}
 
 export interface SceneCallbacks {
   onHoverZone?: (zoneId: ZoneId | null) => void;
   onSelect?: (zoneId: ZoneId | null) => void;
   onSelectEntity?: (kind: 'machine' | 'truck', id: string) => void;
   onHoverEntity?: (kind: 'machine' | 'truck', id: string) => void;
+  onSelectStock?: (selection: StockSelection) => void;
   onFps?: (fps: number) => void;
 }
 
@@ -72,6 +86,10 @@ export class WarehouseScene {
   private entitySync: EntitySync | null = null;
   private simStateRef: SimState | null = null;
   private rtlsLayers: RtlsLayers | null = null;
+  private racksModel: RacksModel | null = null;
+  private slotPos = new Map<string, { x: number; y: number; z: number }>();
+  private highlight: THREE.Mesh | null = null;
+  private highlightUntil = 0;
 
   private followTarget: THREE.Object3D | null = null;
 
@@ -134,7 +152,6 @@ export class WarehouseScene {
     const layout = this.layout;
     const site = buildSite(layout);
     const building = buildBuilding(layout);
-    const racks = buildRacks(layout);
     const labels = buildLabels(layout);
 
     const siteGroup = new THREE.Group();
@@ -149,8 +166,22 @@ export class WarehouseScene {
 
     const racksGroup = new THREE.Group();
     racksGroup.name = 'racks';
-    racksGroup.add(racks);
+    this.racksModel = buildRacks(layout);
+    racksGroup.add(this.racksModel.group);
     this.scene.add(racksGroup);
+
+    // Índice de posiciones de ubicaciones para el stock.
+    const slotPositions = buildSlotPositions(layout);
+    for (const [loc, v] of Object.entries(slotPositions)) this.slotPos.set(loc, v);
+
+    // Marcador de resaltado (lo coloca el buscador o el foco).
+    this.highlight = new THREE.Mesh(
+      new THREE.BoxGeometry(1.5, 5, 1.05),
+      new THREE.MeshBasicMaterial({ color: 0x22a6e0, transparent: true, opacity: 0.35, depthWrite: false }),
+    );
+    this.highlight.visible = false;
+    this.highlight.position.y = 2.5;
+    this.scene.add(this.highlight);
 
     const labelsGroup = new THREE.Group();
     labelsGroup.name = 'labels';
@@ -328,9 +359,14 @@ export class WarehouseScene {
       if (entity) {
         this.callbacks.onSelectEntity?.(entity.kind, entity.id);
       } else {
-        const hits = this.pickZones(e.clientX, e.clientY);
-        const zoneId = (hits[0]?.object.userData.zoneId as ZoneId | undefined) ?? null;
-        this.callbacks.onSelect?.(zoneId);
+        const stock = this.pickStock(e.clientX, e.clientY);
+        if (stock) {
+          this.callbacks.onSelectStock?.(stock);
+        } else {
+          const hits = this.pickZones(e.clientX, e.clientY);
+          const zoneId = (hits[0]?.object.userData.zoneId as ZoneId | undefined) ?? null;
+          this.callbacks.onSelect?.(zoneId);
+        }
       }
     }
     this.dragState = null;
@@ -493,6 +529,80 @@ export class WarehouseScene {
     return null;
   }
 
+  private pickStock(clientX: number, clientY: number): StockSelection | null {
+    if (!this.racksModel) return null;
+    this.raycaster.setFromCamera(this.toNdc(clientX, clientY), this.camera.camera);
+    const paletHits = this.raycaster.intersectObject(this.racksModel.paletMesh, false);
+    if (paletHits.length > 0 && paletHits[0].instanceId !== undefined) {
+      const meta = this.racksModel.byIndex[paletHits[0].instanceId];
+      if (meta) {
+        return { locId: meta.locId, empty: false, sku: meta.sku, expiryDays: meta.expiryDays, x: meta.x, y: meta.y, z: meta.z };
+      }
+    }
+    if (this.racksModel.emptyMesh.visible) {
+      const emptyHits = this.raycaster.intersectObject(this.racksModel.emptyMesh, false);
+      if (emptyHits.length > 0 && emptyHits[0].instanceId !== undefined) {
+        const locId = this.racksModel.emptyIndex[emptyHits[0].instanceId];
+        const p = this.slotPos.get(locId);
+        if (locId && p) return { locId, empty: true, x: p.x, y: p.y, z: p.z };
+      }
+    }
+    return null;
+  }
+
+  /** Cambia el modo de color de los palets y muestra huecos vacíos si procede. */
+  setStockColorMode(mode: StockColorMode) {
+    const model = this.racksModel;
+    if (!model) return;
+    const color = new THREE.Color();
+    for (let i = 0; i < model.byIndex.length; i++) {
+      const meta = model.byIndex[i];
+      const article = articleForSku(meta.sku);
+      color.setHex(colorForStock(mode, meta.sku, meta.temp, meta.expiryDays, article));
+      model.paletMesh.setColorAt(i, color);
+    }
+    if (model.paletMesh.instanceColor) model.paletMesh.instanceColor.needsUpdate = true;
+    model.emptyMesh.visible = mode === 'empty';
+  }
+
+  /** Posición de una ubicación (para el buscador). */
+  slotPoint(locId: string): { x: number; y: number; z: number } | null {
+    return this.slotPos.get(locId) ?? null;
+  }
+
+  /** Enfoca una ubicación con la cámara y la resalta. */
+  focusLocation(locId: string, zoom: boolean = true) {
+    const p = this.slotPos.get(locId);
+    if (!p) return false;
+    this.stopFollow();
+    this.camera.focusOn({ x: p.x, z: p.z }, zoom ? 1 : undefined);
+    if (this.highlight) {
+      this.highlight.position.set(p.x, 2.5, p.z);
+      this.highlight.visible = true;
+      this.highlightUntil = performance.now() + 8000;
+    }
+    return true;
+  }
+
+  /** Información de una ubicación concreta (ocupada en la capa estática o vacía). */
+  stockSelection(locId: string): StockSelection | null {
+    const p = this.slotPos.get(locId);
+    if (!p) return null;
+    const meta = this.racksModel?.byIndex.find((m) => m.locId === locId);
+    if (meta) return { locId, empty: false, sku: meta.sku, expiryDays: meta.expiryDays, x: meta.x, y: meta.y, z: meta.z };
+    return { locId, empty: true, x: p.x, y: p.y, z: p.z };
+  }
+
+  /** Ubicaciones que contienen un SKU (para el buscador). */
+  getSkuLocations(sku: string): { locId: string; x: number; z: number }[] {
+    const out: { locId: string; x: number; z: number }[] = [];
+    if (!this.racksModel) return out;
+    for (const meta of this.racksModel.byIndex) {
+      if (meta.sku === sku) out.push({ locId: meta.locId, x: meta.x, z: meta.z });
+    }
+    return out;
+  }
+
   private loop = () => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
@@ -510,6 +620,11 @@ export class WarehouseScene {
       if (entity) {
         this.camera.setFollowPosition(entity.pos.x, entity.pos.z);
       }
+    }
+
+    // Apaga el resaltado de stock al cabo de unos segundos.
+    if (this.highlight && this.highlight.visible && performance.now() > this.highlightUntil) {
+      this.highlight.visible = false;
     }
 
     const sun = this.scene.userData.sun as THREE.DirectionalLight | undefined;

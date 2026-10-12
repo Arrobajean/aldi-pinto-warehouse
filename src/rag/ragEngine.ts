@@ -86,64 +86,23 @@ export function searchKnowledgeBase(query: string, topK: number = 3): RagSearchR
 }
 
 // Generación aumentada (Augmented Generation)
-export async function generateRagAnswer(query: string, apiKey?: string): Promise<RagResponse> {
+export async function generateRagAnswer(query: string): Promise<RagResponse> {
   const searchResults = searchKnowledgeBase(query, 3);
 
-  // Si no se encontraron fuentes relevantes
+  // Si los fragmentos no aportan contexto, responder con un resumen base.
   if (searchResults.length === 0) {
     return {
       answer: `No he encontrado información específica en la base de datos de operaciones de ALDI Pinto sobre esa consulta. 
 Puedes preguntarme sobre:
-- **Las 100 tiendas** en Madrid, Toledo, Segovia y Ávila y sus rutas de reparto.
-- **La zonificación** (Seco, Frío +2ºC a +4ºC, Congelado -22ºC).
+- **Las 130 tiendas** en 8 provincias (Madrid, Toledo, Segovia, Ávila, Guadalajara, Ciudad Real, Cáceres, Salamanca).
+- **La zonificación** (Seco, Frío +2 ºC a +4 ºC, Congelado -22 ºC).
 - **La flota de carretillas** retráctiles, frontales y preparadores de picking.
 - **Protocolos de cadena de frío** y seguridad en muelles de carga.`,
       sources: [],
     };
   }
 
-  // Si el usuario proporcionó una API Key de Gemini, podemos invocar el endpoint oficial
-  if (apiKey && apiKey.trim().length > 10) {
-    try {
-      const prompt = `Actúa como el Asistente Inteligente de Operaciones Logísticas de la Plataforma Central de ALDI en Pinto (Madrid).
-Responde de forma ejecutiva, precisa y cordial a la pregunta del supervisor utilizando únicamente la siguiente información recuperada (Retrieval Context):
-
-CONTEXTO DEL ALMACÉN:
-${searchResults.map(s => `[${s.chunk.title}]\n${s.chunk.content}`).join('\n\n')}
-
-PREGUNTA DEL SUPERVISOR:
-${query}
-
-Responde en español con formato Markdown pulcro (viñetas, negritas) estructurado para un jefe de operaciones logísticas.`;
-
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 600 }
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const geminiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (geminiText) {
-          return {
-            answer: geminiText,
-            sources: searchResults.map(s => ({
-              title: s.chunk.title,
-              category: s.chunk.category,
-              relevance: s.relevance,
-              snippet: s.chunk.content.slice(0, 150) + '...',
-            })),
-          };
-        }
-      }
-    } catch {
-      // Fallback suave al motor sintético si la red falla
-    }
-  }
+  // Generación local (plan B sin conexión). Con conexión, /api/chat usa Gemini + RAG.
 
   // Motor cognitivo estructurado (Generación nativa sin dependencias externas)
   // Genera respuestas contextualizadas de alta calidad analizando las intenciones

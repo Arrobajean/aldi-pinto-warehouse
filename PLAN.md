@@ -108,7 +108,7 @@ El plan se ejecuta en **dos turnos**. Al acabar cada turno: PR de cada rama de f
 El orden dentro de cada turno respeta las dependencias: F6 alimenta a F9–F14 y F5 alimenta a F14. **No empieces el Turno 2 sin que el Turno 1 cumpla todos sus criterios de aceptación.**
 
 Estado:
-- [ ] F0 · [ ] F1 · [ ] F2 · [ ] F3 · [ ] F4 · [ ] F5
+- [x] F0 · [x] F1 · [x] F2 · [x] F3 · [x] F4 · [x] F5 — **Turno 1 OK**
 - [ ] F6 · [ ] F7 · [ ] F8 · [ ] F9 · [ ] F10 · [ ] F11 · [ ] F12 · [ ] F13 · [ ] F14 · [ ] F15 · [ ] F16
 
 ### Requisitos de arquitectura del Turno 1 que el Turno 2 necesita

@@ -13,9 +13,11 @@ import { useWarehouseScene } from '@/hooks/use-warehouse-scene';
 import { useSimulation } from '@/hooks/use-simulation';
 import { useRtls } from '@/hooks/use-rtls';
 import { useStock } from '@/hooks/use-stock';
+import { useAssistant, defaultActions } from '@/hooks/use-assistant';
 import { MachineCard } from '@/components/machine-card';
 import { EntityLabel } from '@/components/entity-label';
 import { StockPanel } from '@/components/stock-panel';
+import { ChatPanel } from '@/components/assistant/chat-panel';
 
 const Viewport = dynamic(() => import('@/components/viewport').then((m) => m.Viewport), {
   ssr: false,
@@ -28,6 +30,7 @@ export function WarehouseApp() {
   const labelRef = useRef<HTMLDivElement | null>(null);
   const rtls = useRtls(w.sceneRef, labelRef);
   const stock = useStock(w.sceneRef, sim.state);
+  const assistant = useAssistant(() => sim.state, defaultActions(w.sceneRef));
   const [followingId, setFollowingId] = useState<string | null>(null);
   const selected = w.zones.find((z) => z.id === w.selectedZone) ?? null;
 
@@ -103,12 +106,20 @@ export function WarehouseApp() {
           </div>
         )}
 
-        {sim.state && (
+        {sim.state && !assistant.open && (
           <>
             <DockList state={sim.state} />
             <EventFeed state={sim.state} rtlsAlerts={rtls.alerts} />
           </>
         )}
+
+        <ChatPanel
+          open={assistant.open}
+          onToggle={() => assistant.setOpen((v) => !v)}
+          messages={assistant.messages}
+          loading={assistant.loading}
+          onSend={(t) => assistant.send(t)}
+        />
 
         <SimControls
           state={sim.state}

@@ -15,8 +15,8 @@ export interface AnimatedMachine {
   };
 }
 
-/** Altura del piso del semirremolque cuando está atracado (altura de andén, 1,2 m). */
-export const TRAILER_DOCK_LIFT = 0.65;
+/** Cota del piso de la caja del semirremolque sobre el patio (1,2 m): la misma que el piso de la nave. */
+export const TRAILER_BED_H = 1.2;
 
 const BLUE = 0x1f3d7a;
 const ORANGE = 0xf39200;
@@ -193,8 +193,8 @@ export function createOrderPicker(): AnimatedMachine {
 }
 
 /**
- * Tractora + semirremolque de 13,6 m. El semirremolque (caja y decoración) va en `trailerBody`,
- * que sube `TRAILER_DOCK_LIFT` al atracar para que su piso quede a altura de andén.
+ * Tractora + semirremolque de 13,6 m. El semirremolque apoya en la quinta rueda de la tractora (la placa une el
+ * chasis de la tractora con el larguero continuo del remolque), así que no hay hueco en la unión ni al atracar.
  */
 export function createTruck({ reefer }: { reefer?: boolean } = {}) {
   const g = group3();
@@ -215,23 +215,24 @@ export function createTruck({ reefer }: { reefer?: boolean } = {}) {
   const chassis = box(2.3, 0.5, 4.5, lambert(0x2a3550), 0, 0.7, -3.4);
   g.add(chassis);
 
-  // Semirremolque 13,6 m (caja de fondo en su propio grupo, elevable).
+  // Semirremolque 13,6 m: la caja de 2,7 m apoya sobre el larguero, a 1,2 m (piso de la caja).
   const trailer = box(2.55, 2.7, 13.6, lambert(reefer ? 0xe8eef4 : 0xdfe6ee));
-  trailer.position.set(0, 1.9, 4.8);
+  trailer.position.set(0, TRAILER_BED_H + 1.35, 4.8);
   trailerBody.add(trailer);
-  // Larguero del semirremolque bajo la caja (une la caja con los ejes).
-  trailerBody.add(box(2.2, 0.25, 13.0, lambert(0x2a3550), 0, 0.45, 4.8));
+  // Chasis continuo del semirremolque: larguero (1,0–1,2 m) y bajo (0,6–1,0 m) desde la quinta rueda hasta la trasera.
+  trailerBody.add(box(2.2, 0.2, 13.6, lambert(0x2a3550), 0, 1.1, 4.8));
+  trailerBody.add(box(2.0, 0.4, 13.6, lambert(0x2a3550), 0, 0.8, 4.8));
 
   // Placa de marca en los laterales (logo ALDI Nord).
   const decalPw = 2.2;
   const decalPh = 2.3;
   const decalZ = 8.6;
   const sideRight = createBrandDecal(decalPw, decalPh);
-  sideRight.position.set(1.3, 2.0, decalZ);
+  sideRight.position.set(1.3, TRAILER_BED_H + 1.35, decalZ);
   sideRight.rotation.y = Math.PI / 2;
   trailerBody.add(sideRight);
   const sideLeft = createBrandDecal(decalPw, decalPh);
-  sideLeft.position.set(-1.3, 2.0, decalZ);
+  sideLeft.position.set(-1.3, TRAILER_BED_H + 1.35, decalZ);
   sideLeft.rotation.y = -Math.PI / 2;
   trailerBody.add(sideLeft);
   if (reefer) {
@@ -240,8 +241,9 @@ export function createTruck({ reefer }: { reefer?: boolean } = {}) {
     const unitGrill = box(0.7, 0.9, 0.35, lambert(0x4d5b6b), 0, 1.9, -3.15);
     g.add(unitGrill);
   }
-  const kingpin = box(0.4, 0.4, 0.4, lambert(0x2a3550), 0, 0.95, -0.8);
-  g.add(kingpin);
+  // Quinta rueda: placa sobre el chasis de la tractora (0,95–1,0 m) bajo la nariz del remolque (z −2,0 a −1,2).
+  g.add(box(1.8, 0.05, 0.8, lambert(0x2a3550), 0, 0.975, -1.6));
+  g.add(box(0.4, 0.1, 0.4, lambert(0x2a3550), 0, 1.05, -1.6));
 
   // Ruedas de la tractora y del semirremolque (las ruedas no suben: solo la caja).
   const wheels: THREE.Object3D[] = [];

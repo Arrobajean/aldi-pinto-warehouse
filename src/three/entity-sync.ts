@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { WarehouseLayout } from '@/lib/layout/types';
 import { forEachRackSlot } from '@/lib/layout/pinto-layout';
 import type { Machine, SimState, Truck } from '@/lib/sim/types';
-import { createErE225i, createOrderPicker, createPalletTruck, createReachTruck, createTruck, TRAILER_DOCK_LIFT } from '@/three/builders/models';
+import { createErE225i, createOrderPicker, createPalletTruck, createReachTruck, createTruck } from '@/three/builders/models';
 import type { RacksModel } from '@/three/builders/build-racks';
 import { DOCK_EDGE_Z, DOCK_FACE_Z, NAVE_FLOOR_H } from '@/three/builders/build-building';
 import { newKin, stepBike, stepKin, type BikeOpts, type BikeState, type Kin, type KinOpts } from '@/three/motion';
@@ -27,12 +27,9 @@ type ModelRef = {
   pickRun?: { taskId: string; total: number };
   /** Cinemática suavizada de la pose dibujada (posición, rumbo y velocidad). */
   kin?: Kin;
-  /** Piezas móviles: ruedas (giran con la distancia), semirremolque (sube al atracar), operario. */
+  /** Piezas móviles: ruedas (giran con la distancia), operario. */
   wheels?: THREE.Object3D[];
   wheelRadius?: number;
-  trailerBody?: THREE.Object3D;
-  /** Altura suavizada del semirremolque (0 en la calle, TRAILER_DOCK_LIFT en el andén). */
-  trailerLift?: number;
   /** Cinemática del camión (tipo bicicleta) y fase de la maniobra de atraque. */
   bike?: BikeState;
   dockStage?: 'lane' | 'arc' | 'reverse';
@@ -208,10 +205,8 @@ export class EntitySync {
     ref = {
       group: t.group,
       forkBase: 0,
-      trailerBody: t.nodes.trailerBody,
       wheels: t.nodes.wheels,
       wheelRadius: TRUCK_WHEEL_R,
-      trailerLift: 0,
     };
     this.truckLayer.add(t.group);
     this.trucks.set(id, ref);
@@ -413,10 +408,6 @@ export class EntitySync {
     ref.group.rotation.y = b.heading;
     this.spinWheels(ref, Math.abs(dist));
 
-    // Semirremolque: sube a altura de andén al atracar y baja al salir.
-    const liftTarget = t.status === 'at_dock' ? TRAILER_DOCK_LIFT : 0;
-    ref.trailerLift = (ref.trailerLift ?? 0) + (liftTarget - (ref.trailerLift ?? 0)) * (1 - Math.exp(-dt * SMOOTH_RATE));
-    if (ref.trailerBody) ref.trailerBody.position.y = ref.trailerLift;
   }
 
   /** Giro de las ruedas según la distancia recorrida (eje de rueda = X local). */

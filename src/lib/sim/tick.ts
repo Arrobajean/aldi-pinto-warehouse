@@ -1,17 +1,13 @@
-import type { Dock, WarehouseLayout } from '@/lib/layout/types';
+import type { WarehouseLayout } from '@/lib/layout/types';
 import { LEVEL_HEIGHT, rackRects } from '@/lib/layout/pinto-layout';
 import { articleForSku } from '@/lib/stock/catalog';
-import {
-  KEEP_OUT,
-  dockInteriorPoint,
-  reserveZone,
-  stagingPoint,
-} from '@/lib/sim/positions';
+import { dockInteriorPoint, reserveZone, stagingPoint } from '@/lib/sim/positions';
 import { PathFinder } from '@/lib/sim/path';
 import { emitEvent, nextTaskId } from '@/lib/sim/events';
 import { nextRandom } from '@/lib/sim/init';
 import { shiftAt, type SimState } from '@/lib/sim/types';
 import type { Machine, Pallet, Point, SimTask, Truck } from '@/lib/sim/types';
+import { spawnOutboundIfRoom, updateInboundSpawns, updateTruck } from '@/lib/sim/trucks';
 import type { RoomSpot } from '@/lib/layout/types';
 import { simpleDispatch, type DispatchPolicy } from '@/lib/sim/dispatch';
 
@@ -82,9 +78,6 @@ function advanceStrapper(state: SimState, deps: SimDeps, st: SimState['strappers
     st.current = { dockId: entry.dockId, paletIds: entry.paletIds, doneAt: state.ts + seconds };
   }
 }
-
-const TRUCK_YARD_SPEED = 4.2; // 15 km/h
-const PLATES = ['E-4821-KLP', 'E-9114-LCM', 'E-2650-PRQ', 'E-7308-JHV', 'E-1185-BNK', 'E-6620-XWZ', 'E-3456-TDQ', 'E-8899-MFA'];
 
 function aisleAt(deps: SimDeps, x: number, z: number): string | null {
   for (const a of deps.aisles) {
@@ -404,7 +397,31 @@ function updateIdle(state: SimState, deps: SimDeps, m: Machine, dt: number) {
   if (m.route.length === 0) arriveAtSpot(m);
 }
 
-function updateMachine(state: SimState, deps: SimDeps, m: Machine, dt: number) {
+/** Contadores de un paso de simulación compartidos por todas las máquinas. */
+interface MachineTickCtx {
+  /** Máquinas de almacén con tarea (los ERE de muelle son una cuadrilla aparte y no cuentan). */
+  active: number;
+}
+
+/** Separación mínima entre dos máquinas que dejan su plaza de la sala (s). */
+const SPOT_RELEASE_GAP = 3;
+
+/**
+ * Una máquina acepta tareas si es turno de día, ya ha fichado (retraso escalonado desde el inicio del turno),
+ * no se supera el número de máquinas de almacén activas del turno (`SHIFTS[].machines`; los ERE de muelle
+ * no cuentan: un camión atracado no puede esperar) y, si está aparcada, le toca salir de la sala.
+ */
+function canTakeTask(state: SimState, m: Machine, ctx: MachineTickCtx): boolean {
+  const shift = shiftAt(state.ts);
+  if (shift.id === 'noche') return false;
+  if (state.ts < state.lastShiftChange + m.clockInDelay) return false;
+  if (m.kind !== 'frontal' && ctx.active >= shift.machines) return false;
+  const parked = m.spot !== null && m.route.length === 0;
+  if (parked && state.ts - state.lastSpotReleaseAt < SPOT_RELEASE_GAP) return false;
+  return true;
+}
+
+function updateMachine(state: SimState, deps: SimDeps, m: Machine, dt: number, ctx: MachineTickCtx) {
   // Solo se mantiene la reserva mientras la máquina se desplaza.
   if (m.status !== 'traveling' && m.status !== 'waiting') releaseAisle(state, m);
 
@@ -431,8 +448,11 @@ function updateMachine(state: SimState, deps: SimDeps, m: Machine, dt: number) {
       emitEvent(state, 'machine_low_battery', `${m.id} (${m.operatorName}) con ${Math.round(m.battery)}% — va a recargar`);
     }
     // Fuera de turno (noche) no se asignan tareas: la máquina termina y aparca en la sala de máquinas.
-    const assigned = shiftAt(state.ts).id !== 'noche' && deps.dispatch.assignTask(state, m);
+    const assigned = canTakeTask(state, m, ctx) && deps.dispatch.assignTask(state, m);
     if (assigned) {
+      if (m.kind !== 'frontal') ctx.active++;
+      // Las máquinas aparcadas salen de la sala de una en una.
+      if (m.spot && m.route.length === 0) state.lastSpotReleaseAt = state.ts;
       // Sale de la plaza de sala (o abandona el trayecto hacia ella) para trabajar.
       releaseSpot(state, m);
       m.route = [];
@@ -465,304 +485,9 @@ function updateMachine(state: SimState, deps: SimDeps, m: Machine, dt: number) {
     m.workingRemaining -= dt;
     if (m.workingRemaining <= 0) {
       completeTask(state, deps, m, task);
+      if (m.kind !== 'frontal') ctx.active--;
     }
   }
-}
-
-function moveTruck(_state: SimState, _deps: SimDeps, t: Truck, dt: number): boolean {
-  if (t.route.length === 0) return true;
-  const target = t.route[0];
-  const step = t.speed * dt;
-  const dx = target.x - t.pos.x;
-  const dz = target.z - t.pos.z;
-  const dist = Math.hypot(dx, dz);
-  // La tractora mira a −Z con rotación 0: el frente apunta a la dirección de avance.
-  if (dist > 1e-6) t.heading = Math.atan2(-dx, -dz);
-  if (dist <= step) {
-    t.pos.x = target.x;
-    t.pos.z = target.z;
-    t.route.shift();
-  } else {
-    const f = step / dist;
-    t.pos.x += dx * f;
-    t.pos.z += dz * f;
-  }
-  return t.route.length === 0;
-}
-
-function dockBy(state: SimState, deps: SimDeps, t: Truck): Dock | null {
-  return deps.dispatch.assignDock(state, t, deps.layout);
-}
-
-function createPalet(state: SimState, temp: Pallet['temp'], destStoreId?: string): Pallet {
-  const id = `PL-${String(++state.seq.palet).padStart(5, '0')}`;
-  const p: Pallet = {
-    id,
-    sku: `SKU-${1037 + (state.seq.palet % 1780)}`,
-    family: destStoreId ? 'pedido' : 'proveedor',
-    temp,
-    state: 'received',
-    locId: null,
-    pos: { ...KEEP_OUT },
-    height: 1.2,
-    destStoreId,
-    receivedDay: 0,
-    daysToExpiry: 30 + nextRandom(state) % 90,
-    batch: `L${String(24000 + (state.seq.palet % 900)).padStart(5, '0')}`,
-    quantity: 40 + (state.seq.palet % 60),
-  };
-  return p;
-}
-
-function updateInboundSpawns(state: SimState) {
-  const list = state.demand.inbound;
-  let spawned = 0;
-  for (let i = state.spawnedInbound; i < list.length; i++) {
-    const arrival = list[i];
-    if (arrival.atTs > state.ts) break;
-    if (state.trucks.length >= 36) break;
-    state.spawnedInbound = i + 1;
-    spawned++;
-    spawnInboundTruck(state, arrival.paletsCount, arrival.temp, arrival.provider);
-  }
-  return spawned;
-}
-
-function spawnInboundTruck(state: SimState, paletsCount: number, temp: 'dry' | 'cool' | 'frozen', provider: string) {
-  const id = `TRK-${String(++state.seq.truck).padStart(3, '0')}`;
-  const plate = PLATES[state.seq.truck % PLATES.length];
-  const palets: Pallet[] = [];
-  const cargoPaletIds: string[] = [];
-  for (let i = 0; i < paletsCount; i++) {
-    const p = createPalet(state, temp);
-    p.family = provider;
-    palets.push(p);
-    cargoPaletIds.push(p.id);
-  }
-  for (const p of palets) state.paletById[p.id] = p;
-  state.pallets.push(...palets);
-  state.trucks.push({
-    id,
-    plate,
-    direction: 'inbound',
-    status: 'gate',
-    dockId: null,
-    pos: { ...KEEP_OUT },
-    path: [],
-    route: [],
-    speed: TRUCK_YARD_SPEED,
-    progress: 0,
-    cargoPaletIds,
-    storeIds: [],
-    temp,
-    gateAt: state.ts,
-    paletsLoaded: 0,
-    waitTimer: 0,
-  });
-  emitEvent(state, 'truck_arrived', `Camión ${plate} (proveedor ${provider}) llega a la garita`);
-}
-
-function spawnOutboundIfRoom(state: SimState) {
-  if (state.trucks.length >= 34) return;
-  const order = state.demand.orders[state.outOrdersSpawned];
-  if (!order) return;
-  // Salidas escalonadas: un camión cada 5 min desde las 06:30, no todos a la vez al empezar el turno.
-  const spawnAt = 6.5 * 3600 + state.outOrdersSpawned * 300;
-  if (state.ts < spawnAt) return;
-  state.outOrdersSpawned++;
-  const id = `TRK-${String(++state.seq.truck).padStart(3, '0')}`;
-  const plate = PLATES[state.seq.truck % PLATES.length];
-  state.trucks.push({
-    id,
-    plate,
-    direction: 'outbound',
-    status: 'gate',
-    dockId: null,
-    pos: { ...KEEP_OUT },
-    path: [],
-    route: [],
-    speed: TRUCK_YARD_SPEED,
-    progress: 0,
-    cargoPaletIds: [],
-    storeIds: [order.storeId],
-    temp: order.temp,
-    gateAt: state.ts,
-    orderId: order.id,
-    paletsLoaded: 0,
-    waitTimer: 0,
-  });
-  emitEvent(state, 'truck_arrived', `Camión ${plate} de salida llega para la ruta ${order.storeName}`);
-}
-
-function updateTruck(state: SimState, deps: SimDeps, t: Truck, dt: number) {
-  const yard = deps.yard;
-  t.speed = TRUCK_YARD_SPEED;
-
-  switch (t.status) {
-    case 'gate': {
-      if (t.route.length === 0) {
-        t.route = yard.pointsFor(yard.find(t.pos, 'scale'));
-        t.status = 'scale';
-        emitEvent(state, 'truck_weighted', `${t.plate} pesa en la báscula`);
-      }
-      const arr = moveTruck(state, deps, t, dt);
-      if (arr) t.status = 'scale';
-      break;
-    }
-    case 'scale': {
-      if (t.route.length === 0) {
-        const dock = dockBy(state, deps, t);
-        if (dock) {
-          t.dockId = dock.id;
-          t.route = yard.pointsFor(yard.find(t.pos, `ydock-${dock.id}`));
-          t.status = 'approaching';
-        } else {
-          t.route = yard.pointsFor(yard.find(t.pos, 'park-e'));
-          t.status = 'parking';
-        }
-      } else {
-        moveTruck(state, deps, t, dt);
-      }
-      break;
-    }
-    case 'parking': {
-      if (t.route.length > 0) {
-        const arr = moveTruck(state, deps, t, dt);
-        if (arr) t.route = [];
-        break;
-      }
-      const dock = dockBy(state, deps, t);
-      if (dock) {
-        t.dockId = dock.id;
-        t.route = yard.pointsFor(yard.find(t.pos, `ydock-${dock.id}`));
-        t.status = 'approaching';
-        emitEvent(state, 'truck_docked', `${t.plate} asignado al muelle ${dock.id}`);
-      }
-      break;
-    }
-    case 'approaching': {
-      const arr = moveTruck(state, deps, t, dt);
-      if (arr) {
-        t.status = 'at_dock';
-        const ds = state.dockStates.find((d) => d.dockId === t.dockId);
-        if (ds) {
-          ds.truckId = t.id;
-          ds.paletsProcessed = 0;
-          ds.totalPalets = t.direction === 'inbound' ? t.cargoPaletIds.length : state.demand.orders.find((o) => o.id === t.orderId)?.paletsCount ?? 0;
-          ds.state = t.direction === 'inbound' ? 'unloading' : 'loading';
-          emitEvent(
-            state,
-            t.direction === 'inbound' ? 'truck_unloading' : 'truck_loading',
-            `${t.plate} atracado en ${t.dockId} — ${t.direction === 'inbound' ? 'descarga' : 'carga'}`,
-          );
-        }
-      }
-      break;
-    }
-    case 'at_dock': {
-      const dock = deps.layout.docks.find((d) => d.id === t.dockId)!;
-      const dockId = t.dockId!;
-      if (t.direction === 'inbound') {
-        const nextPalet = t.cargoPaletIds[0];
-        if (nextPalet) {
-          // Una sola tarea de frontal por muelle en curso (no solo en cola): si no, se duplica el mismo palé.
-          const pending = state.tasks.some((task) => task.state !== 'done' && task.kind === 'dock_shift' && task.dockId === dockId);
-          if (!pending) {
-            const p = state.paletById[nextPalet];
-            if (p) {
-              state.tasks.unshift({
-                id: nextTaskId('TSK'),
-                kind: 'dock_shift',
-                machineKind: 'frontal',
-                from: dockInteriorPoint(dock),
-                to: stagingPoint(dock),
-                dockId,
-                paletIds: [nextPalet],
-                duration: 6,
-                state: 'queued',
-              });
-            }
-          }
-        } else if (!state.tasks.some((task) => task.dockId === dockId && task.state === 'queued')) {
-          // Descarga completa → salir.
-          finishTruck(state, deps, t);
-        }
-      } else {
-        const ds = state.dockStates.find((d) => d.dockId === dockId);
-        const lane = state.lanePallets[dockId] ?? [];
-        const need = (ds?.totalPalets ?? 0) - t.paletsLoaded;
-        if (need > 0 && lane.length > 0) {
-          const pending = state.tasks.some((task) => task.dockId === dockId && task.state !== 'done' && task.kind === 'dock_shift');
-          if (!pending) {
-            const pid = lane[0]!;
-            state.lanePallets[dockId] = lane.filter((x) => x !== pid);
-            state.tasks.unshift({
-              id: nextTaskId('TSK'),
-              kind: 'dock_shift',
-              machineKind: 'frontal',
-              from: stagingPoint(dock),
-              to: dockInteriorPoint(dock),
-              dockId,
-              paletIds: [pid],
-              duration: 5,
-              state: 'queued',
-            });
-          }
-        } else if (targetFullyPrepared(state, t, ds?.totalPalets ?? 0) && t.paletsLoaded >= (ds?.totalPalets ?? 0)) {
-          finishTruck(state, deps, t);
-        }
-      }
-      break;
-    }
-    case 'leaving': {
-      const arr = moveTruck(state, deps, t, dt);
-      if (arr) {
-        emitEvent(state, 'truck_left', `${t.plate} abandona la plataforma hacia ${t.direction === 'inbound' ? 'su origen' : 'sus tiendas'}`);
-        if (t.direction === 'outbound') {
-          state.stats.trucksOut++;
-          state.stats.shipped += t.paletsLoaded;
-          if (t.orderId) state.outboundDone.push(t.orderId);
-          // Los palets expedidos salen de la nave: se retiran para no acumular memoria.
-          retireShippedPalets(state, t.cargoPaletIds);
-          t.cargoPaletIds = [];
-        }
-        t.status = 'done';
-      }
-      break;
-    }
-    case 'offsite':
-    case 'done':
-      break;
-  }
-}
-
-function targetFullyPrepared(state: SimState, t: Truck, total: number): boolean {
-  return (state.lanePallets[t.dockId ?? ''] ?? []).length + t.paletsLoaded >= total;
-}
-
-function finishTruck(state: SimState, deps: SimDeps, t: Truck) {
-  const ds = state.dockStates.find((d) => d.dockId === t.dockId);
-  if (ds) {
-    ds.truckId = null;
-    ds.state = 'free';
-  }
-  t.status = 'leaving';
-  const dock = deps.layout.docks.find((d) => d.id === t.dockId);
-  t.dockId = null;
-  const start = dock ? dockInteriorPoint(dock) : t.pos;
-  t.route = [
-    ...deps.yard.pointsFor(deps.yard.find(start, 'park-e')),
-    ...deps.yard.pointsFor(deps.yard.find({ x: 150, z: 105 }, 'exit')),
-  ];
-}
-
-/** Elimina de la simulación los palets que acaban de salir en un camión. */
-function retireShippedPalets(state: SimState, ids: string[]) {
-  if (ids.length === 0) return;
-  const gone = new Set(ids);
-  for (const pid of ids) delete state.paletById[pid];
-  state.pallets = state.pallets.filter((p) => !gone.has(p.id));
-  if (state.outboundDone.length > 500) state.outboundDone.splice(0, state.outboundDone.length - 500);
 }
 
 const TEMPS: Pallet['temp'][] = ['dry', 'cool', 'frozen'];
@@ -983,7 +708,8 @@ export function tick(state: SimState, deps: SimDeps, dt: number) {
   void spawned;
 
   // Máquinas.
-  for (const m of state.machines) updateMachine(state, deps, m, dt);
+  const ctx: MachineTickCtx = { active: state.machines.filter((m) => m.taskId !== null && m.kind !== 'frontal').length };
+  for (const m of state.machines) updateMachine(state, deps, m, dt, ctx);
 
   // Camiones.
   for (const t of [...state.trucks]) {

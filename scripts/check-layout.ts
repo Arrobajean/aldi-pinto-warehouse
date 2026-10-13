@@ -1,6 +1,8 @@
 import { buildPintoLayout, forEachRackSlot } from '../src/lib/layout/pinto-layout';
 import { rectArea } from '../src/lib/layout/types';
 import { STORES } from '../src/lib/data/stores';
+import { dockApproach } from '../src/lib/layout/dock-geometry';
+import { yardLanes } from '../src/lib/sim/yard-routes';
 
 const layout = buildPintoLayout();
 
@@ -79,3 +81,26 @@ for (const wc of layout.restrooms) {
 }
 console.log('Aseos:', layout.restrooms.length, '· aristas que cortan un aseo:', restroomCuts, '· solapes con carriles/flejadoras/salas:', restroomOverlaps);
 console.log('Tiendas:', STORES.length, 'por provincia:', Object.entries(STORES.reduce<Record<string, number>>((a, s) => { a[s.province] = (a[s.province] ?? 0) + 1; return a; }, {})).map(([k, v]) => `${k}=${v}`).join(', '));
+// Maniobra de atraque: mismos números que la animación anterior de la escena (calle z = 105 / x = 150, radio 12,5).
+let approachMismatch = 0;
+for (const d of layout.docks) {
+  const a = dockApproach(d);
+  const u = d.face === 'south' ? d.x : d.z;
+  const exp =
+    d.face === 'south'
+      ? { start: [u + 12.5, 105], stop: [u, 117.5], target: [u, 94.1], h: Math.PI }
+      : { start: [150, u + 12.5], stop: [162.5, u], target: [139.1, u], h: -Math.PI / 2 };
+  const near = (p: { x: number; z: number }, q: number[]) => Math.abs(p.x - q[0]) < 1e-9 && Math.abs(p.z - q[1]) < 1e-9;
+  if (!near(a.start, exp.start) || !near(a.stop, exp.stop) || !near(a.target, exp.target) || Math.abs(Math.sin(a.alignHeading - exp.h)) + Math.abs(1 - Math.cos(a.alignHeading - exp.h)) > 1e-9) approachMismatch++;
+}
+console.log('Maniobras de atraque distintas de las de la escena anterior:', approachMismatch);
+
+// Carriles del patio: ningún punto dentro de la nave ni en el aparcamiento de semirremolques.
+const nave = layout.building.rect;
+let laneInside = 0;
+for (const lane of yardLanes(layout.docks, layout.site.truckParking.stalls)) {
+  for (const p of lane) {
+    if (p.x > nave.xMin && p.x < nave.xMax && p.z > nave.zMin && p.z < nave.zMax) laneInside++;
+  }
+}
+console.log('Puntos de carril del patio dentro de la nave:', laneInside);

@@ -4,9 +4,9 @@ import { forEachRackSlot } from '@/lib/layout/pinto-layout';
 import type { Machine, SimState, Truck } from '@/lib/sim/types';
 import { createErE225i, createOrderPicker, createPalletTruck, createReachTruck, createTruck } from '@/three/builders/models';
 import type { RacksModel } from '@/three/builders/build-racks';
-import { DOCK_EDGE_Z, DOCK_FACE_Z, NAVE_FLOOR_H } from '@/three/builders/build-building';
-import { FACE_V, LANE_DEPTH, dockPoint, dockU, faceNormal, faceXZ } from '@/lib/layout/dock-geometry';
-import { newKin, stepBike, stepKin, type BikeOpts, type BikeState, type Kin, type KinOpts } from '@/three/motion';
+import { DOCK_FACE_Z, NAVE_FLOOR_H } from '@/three/builders/build-building';
+import { LANE_DEPTH, dockPoint } from '@/lib/layout/dock-geometry';
+import { newKin, shortestAngle, stepKin, type Kin, type KinOpts } from '@/three/motion';
 
 /** Sube al GPU solo el rango de instancias modificado en este fotograma. */
 function uploadRange(mesh: THREE.InstancedMesh, range: { min: number; max: number }) {
@@ -31,9 +31,6 @@ type ModelRef = {
   /** Piezas móviles: ruedas (giran con la distancia), operario. */
   wheels?: THREE.Object3D[];
   wheelRadius?: number;
-  /** Cinemática del camión (tipo bicicleta) y fase de la maniobra de atraque. */
-  bike?: BikeState;
-  dockStage?: 'lane' | 'arc' | 'reverse';
   operator?: THREE.Object3D;
   /** Fase de balanceo del operario. */
   swayPhase?: number;
@@ -41,45 +38,15 @@ type ModelRef = {
   lean?: number;
 };
 
-/** Punto de la cara trasera del semirremolque en el andén: la caja de 13,6 m queda a 0,1 m del borde del andén (z=82,4). */
-const DOCK_TRUCK_REAR_Z = DOCK_EDGE_Z + 0.1;
-/** Origen del camión atracado: su remolque (trasera en local z=+11,6) mira hacia la nave con heading π. */
-const DOCK_TRUCK_Z = DOCK_TRUCK_REAR_Z + 11.6;
 /** Radio de la rueda de las máquinas y de los camiones (para el giro según la distancia). */
 const MACHINE_WHEEL_R = 0.13;
 const TRUCK_WHEEL_R = 0.4;
-/** Límites de movimiento: máquinas y camiones (presentación). */
+/** Límites de movimiento de las máquinas (presentación). */
 const MACHINE_KIN: KinOpts = { maxSpeed: 3.0, accel: 2.0, turnRate: 2.6, frontAxis: 'pz', snapDist: 12 };
-/** Camión (presentación tipo bicicleta): radio de giro mínimo de un tractocamión de 16,5 m. */
-const TRUCK_MIN_RADIUS = 12.5;
-const TRUCK_BIKE: BikeOpts = { minRadius: TRUCK_MIN_RADIUS, accel: 1.0, brake: 1.5, lookahead: 4.0 };
-/** Velocidades máximas del camión (m/s): patio, maniobra (a menos de 25 m del muelle) y marcha atrás. */
-const TRUCK_YARD_V = 4.2;
-const TRUCK_MANEUVER_V = 1.4;
-const TRUCK_REVERSE_V = 0.8;
-const TRUCK_SLOW_DIST = 25;
-/** Calle de los muelles en el patio (eje z) y punto de parada del giro amplio (a un radio de giro del eje de la calle). */
-const YARD_LANE_Z = 105;
-const DOCK_STAGE_Z = YARD_LANE_Z + TRUCK_MIN_RADIUS;
-
-/** Distancia en plano entre dos puntos. */
-function planDist(a: { x: number; z: number }, p: { x: number; z: number }): number {
-  return Math.hypot(a.x - p.x, a.z - p.z);
-}
-/** Velocidad máxima según la distancia al punto: maniobra cerca del muelle, patio lejos. */
-function speedNear(b: { x: number; z: number }, p: { x: number; z: number }): number {
-  return planDist(b, p) < TRUCK_SLOW_DIST ? TRUCK_MANEUVER_V : TRUCK_YARD_V;
-}
-/** Último punto de la ruta de la simulación (o la posición del camión si no queda ruta). */
-function routeEnd(route: { x: number; z: number }[], pos: { x: number; z: number }) {
-  return route.length > 0 ? route[route.length - 1] : pos;
-}
-/** Punto de anticipación: primer punto de la ruta a al menos `lookahead` del vehículo. */
-function routeGoal(route: { x: number; z: number }[], b: { x: number; z: number }, pos: { x: number; z: number }) {
-  if (route.length === 0) return pos;
-  for (const p of route) if (planDist(b, p) >= TRUCK_BIKE.lookahead) return p;
-  return route[route.length - 1];
-}
+/** Suavizado de la pose del camión: solo oculta el paso fijo de 0,1 s de la simulación (constante de tiempo, s). */
+const TRUCK_SMOOTH_TAU = 0.05;
+/** Distancia a partir de la cual la pose del camión se recoloca de golpe (salto de simulación a alta velocidad). */
+const TRUCK_SNAP_DIST = 6;
 /** Velocidad de convergencia de la inclinación del operario y de la altura del semirremolque (1/s). */
 const SMOOTH_RATE = 6;
 
@@ -375,46 +342,24 @@ export class EntitySync {
   }
 
   /**
-   * Pose dibujada de un camión (presentación): tipo bicicleta con radio de giro mínimo y velocidades de patio,
-   * maniobra y marcha atrás. Sigue la ruta de la simulación; al atracar hace el giro amplio por la calle,
-   * para y entra en marcha atrás en línea recta hasta la niveladora.
+   * Pose dibujada de un camión: la de la simulación (posición y rumbo), con un suavizado muy leve que solo
+   * oculta el paso fijo. Los camiones en la cola exterior (fuera de la parcela) no se dibujan.
    */
   private animateTruck(ref: ModelRef, t: Truck, dt: number) {
-    if (!ref.bike) ref.bike = { x: t.pos.x, z: t.pos.z, heading: t.heading ?? 0, v: 0 };
-    const b = ref.bike;
-    const dock = t.dockId ? this.layout.docks.find((d) => d.id === t.dockId) : undefined;
-    const docking = dock !== undefined && (t.status === 'approaching' || t.status === 'at_dock');
-    let dist: number;
-    if (docking && dock) {
-      if (!ref.dockStage) ref.dockStage = 'lane';
-      // Maniobra en la cara del muelle: u a lo largo de la fachada y v hacia fuera (sur: z; este: x).
-      const f = dock.face;
-      const u = dockU(dock);
-      const outside = (zAbs: number) => faceXZ(f, u, FACE_V[f] + (zAbs - DOCK_FACE_Z));
-      const T = outside(DOCK_TRUCK_Z);
-      const START = faceXZ(f, u + TRUCK_MIN_RADIUS, FACE_V[f] + (YARD_LANE_Z - DOCK_FACE_Z));
-      const STOP = outside(DOCK_STAGE_Z);
-      const n = faceNormal(f);
-      const alignTo = Math.atan2(-n.x, -n.z);
-      if (ref.dockStage === 'lane' && planDist(b, START) < 0.5) ref.dockStage = 'arc';
-      if (ref.dockStage === 'arc' && planDist(b, STOP) < 1.0) ref.dockStage = 'reverse';
-      if (ref.dockStage === 'lane') {
-        dist = stepBike(b, START.x, START.z, speedNear(b, START), false, dt, TRUCK_BIKE);
-      } else if (ref.dockStage === 'arc') {
-        dist = stepBike(b, STOP.x, STOP.z, TRUCK_MANEUVER_V, false, dt, TRUCK_BIKE);
-      } else {
-        // Marcha atrás en línea recta; la corrección final alinea el rumbo con la pose de atraque.
-        dist = stepBike(b, T.x, T.z, TRUCK_REVERSE_V, true, dt, TRUCK_BIKE, alignTo);
-      }
-    } else {
-      ref.dockStage = undefined;
-      const goal = routeGoal(t.route, b, t.pos);
-      dist = stepBike(b, goal.x, goal.z, speedNear(b, routeEnd(t.route, t.pos)), false, dt, TRUCK_BIKE);
-    }
-    ref.group.position.set(b.x, 0, b.z);
-    ref.group.rotation.y = b.heading;
-    this.spinWheels(ref, Math.abs(dist));
-
+    const g = ref.group;
+    g.visible = t.status !== 'offsite';
+    if (!g.visible) return;
+    const dx = t.pos.x - g.position.x;
+    const dz = t.pos.z - g.position.z;
+    const far = Math.hypot(dx, dz) > TRUCK_SNAP_DIST || !ref.kin;
+    const f = far ? 1 : 1 - Math.exp(-dt / TRUCK_SMOOTH_TAU);
+    const prevX = g.position.x;
+    const prevZ = g.position.z;
+    g.position.set(prevX + dx * f, 0, prevZ + dz * f);
+    g.rotation.y += shortestAngle(t.heading - g.rotation.y) * f;
+    // `kin` solo marca que la pose ya se ha colocado una vez.
+    if (!ref.kin) ref.kin = newKin(t.pos.x, t.pos.z, t.heading);
+    if (!far) this.spinWheels(ref, Math.hypot(g.position.x - prevX, g.position.z - prevZ));
   }
 
   /** Giro de las ruedas según la distancia recorrida (eje de rueda = X local). */

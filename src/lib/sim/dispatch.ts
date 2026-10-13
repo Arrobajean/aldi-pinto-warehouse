@@ -21,7 +21,8 @@ function dockMatches(dock: Dock, truck: Truck): boolean {
 
 export const simpleDispatch: DispatchPolicy = {
   assignDock(state, truck, layout) {
-    if (truck.status !== 'parking') return null;
+    // Se asigna al salir de la báscula o desde una plaza de espera.
+    if (truck.status !== 'parking' && truck.status !== 'scale') return null;
     // Un muelle queda reservado desde que se asigna al camión (no solo al atracar).
     const busy = new Set([
       ...state.dockStates.filter((d) => d.truckId !== null).map((d) => d.dockId),

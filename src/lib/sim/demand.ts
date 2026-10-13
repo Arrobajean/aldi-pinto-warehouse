@@ -40,10 +40,10 @@ export function generateDemand(layout: WarehouseLayout, seed: number): SimDemand
   const providers = ['Pastas Gallo', 'Central Lechera', 'Ultracongelados Polo', 'Bebidas del Sur', 'Conservas Mira', 'Mercamadrid Frutas'];
   const inbound: InboundArrival[] = [];
   let n = 0;
-  // Pico de llegadas entre 05:00 y 12:00, más tarde más espaciadas.
+  // Pico de llegadas entre 05:00 y 12:00, más tarde más espaciadas. El primer proveedor llega con el turno.
   for (let ts = SIM_START_TS; ts < 22 * 3600 && n < 42; n++) {
     const peak = ts >= 5 * 3600 && ts <= 12 * 3600;
-    ts += (peak ? 7 : 14) * 60 + rng() * 10 * 60;
+    if (n > 0) ts += (peak ? 7 : 14) * 60 + rng() * 10 * 60;
     const temp = (['dry', 'cool', 'frozen'] as const)[Math.floor(rng() * 3)];
     inbound.push({
       id: `INB-${String(n + 1).padStart(3, '0')}`,

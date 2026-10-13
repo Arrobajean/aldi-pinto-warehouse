@@ -47,3 +47,36 @@ export function dockPoint(dock: Pick<Dock, 'face' | 'x' | 'z'>, lateral: number,
 export function faceNormal(face: DockFace): { x: number; z: number } {
   return face === 'south' ? { x: 0, z: 1 } : { x: 1, z: 0 };
 }
+
+/** Saliente del andén exterior (m): el borde de la niveladora está a 2,4 m de la fachada (z = 82,4 en el sur). */
+export const DOCK_EDGE_DEPTH = 2.4;
+/** Trasera del semirremolque respecto al origen del camión (m, eje local +Z). */
+export const TRUCK_REAR_LOCAL = 11.6;
+/** Radio del arco de atraque (radio de giro mínimo del camión). */
+export const DOCK_TURN_RADIUS = 12.5;
+/** Carril de aproximación del patio, a 25 m de la fachada (sur: z = 105; este: x = 150). */
+export const YARD_APPROACH_V = 25;
+/** Carril de salida, a un radio de giro del de aproximación (sur: z = 117,5; este: x = 162,5). */
+export const YARD_EXIT_V = YARD_APPROACH_V + DOCK_TURN_RADIUS;
+
+/**
+ * Maniobra de atraque de un muelle. El camión llega por el carril de aproximación circulando hacia −u,
+ * gira un cuarto de vuelta desde `start` hasta `stop` (mirando hacia fuera de la nave) y retrocede en
+ * línea recta hasta `target`, con la trasera a 0,1 m de la niveladora y el rumbo `alignHeading`.
+ */
+export function dockApproach(dock: Pick<Dock, 'face' | 'x' | 'z'>): {
+  start: { x: number; z: number };
+  stop: { x: number; z: number };
+  target: { x: number; z: number };
+  alignHeading: number;
+} {
+  const f = dock.face;
+  const u = dockU(dock);
+  const n = faceNormal(f);
+  return {
+    start: faceXZ(f, u + DOCK_TURN_RADIUS, FACE_V[f] + YARD_APPROACH_V),
+    stop: faceXZ(f, u, FACE_V[f] + YARD_EXIT_V),
+    target: faceXZ(f, u, FACE_V[f] + DOCK_EDGE_DEPTH + 0.1 + TRUCK_REAR_LOCAL),
+    alignHeading: Math.atan2(-n.x, -n.z),
+  };
+}

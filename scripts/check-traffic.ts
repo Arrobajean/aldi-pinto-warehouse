@@ -2,6 +2,7 @@ import { buildPintoLayout } from '../src/lib/layout/pinto-layout';
 import { createInitialState } from '../src/lib/sim/init';
 import { makeDeps, tick } from '../src/lib/sim/tick';
 import { formatSimTime } from '../src/lib/sim/clock';
+import { dockApproach } from '../src/lib/layout/dock-geometry';
 
 // Medición de tráfico (fase 0 del plan de correcciones).
 // Simula desde el inicio de turno hasta las 10:00, muestreando 1 vez por segundo simulado
@@ -27,6 +28,7 @@ let minTruck = Infinity;
 const maxByStatus: Record<string, number> = {};
 const firstSeen = new Map<string, number>();
 const approachSec = new Map<string, number>();
+let maxDockErr = 0;
 
 let step = 0;
 while (s.ts < END_TS) {
@@ -39,13 +41,20 @@ while (s.ts < END_TS) {
   const counts: Record<string, number> = {};
   for (const t of s.trucks) {
     counts[t.status] = (counts[t.status] ?? 0) + 1;
-    if (!firstSeen.has(t.id)) firstSeen.set(t.id, s.ts);
+    // Aparición = entrada en la parcela (la cola exterior no cuenta).
+    if (t.status !== 'offsite' && !firstSeen.has(t.id)) firstSeen.set(t.id, s.ts);
+    if (t.status === 'at_dock' && t.dockId) {
+      const dk = layout.docks.find((d) => d.id === t.dockId)!;
+      const a = dockApproach(dk);
+      maxDockErr = Math.max(maxDockErr, Math.hypot(t.pos.x - a.target.x, t.pos.z - a.target.z));
+    }
     if (t.status === 'approaching') approachSec.set(t.id, (approachSec.get(t.id) ?? 0) + 1);
   }
   for (const [k, v] of Object.entries(counts)) maxByStatus[k] = Math.max(maxByStatus[k] ?? 0, v);
 
   // Camiones solapados (no atracados).
-  const ts = s.trucks.filter((t) => t.status !== 'at_dock');
+  // Fuera: atracados, aparcados en su plaza de espera (en paralelo a 4 m) y la cola exterior.
+  const ts = s.trucks.filter((t) => t.status !== 'at_dock' && t.status !== 'offsite' && !(t.status === 'parking' && t.route.length === 0));
   for (let a = 0; a < ts.length; a++) {
     for (let b = a + 1; b < ts.length; b++) {
       const d = Math.hypot(ts[a].pos.x - ts[b].pos.x, ts[a].pos.z - ts[b].pos.z);
@@ -68,6 +77,8 @@ while (s.ts < END_TS) {
 
 const round = (n: number, dp = 2) => (Number.isFinite(n) ? Number(n.toFixed(dp)) : null);
 const approachMin = [...approachSec.values()].map((sec) => sec / 60);
+const perMinute: Record<number, number> = {};
+for (const ts of firstSeen.values()) if (ts > startTs + 1) perMinute[Math.floor(ts / 60)] = (perMinute[Math.floor(ts / 60)] ?? 0) + 1;
 const arrivals = [...firstSeen.entries()].map(([id, ts]) => `${id}@${formatSimTime(ts)}`);
 
 console.log(`Inicio: ${formatSimTime(startTs)} · fin: ${formatSimTime(s.ts)} · muestras: ${samples}`);
@@ -81,6 +92,12 @@ console.log(
       minTruck_m: round(minTruck),
       maxTrucksByStatus: maxByStatus,
       trucksSeen: firstSeen.size,
+      maxAtDockTargetErr_m: round(maxDockErr, 3),
+      maxEntriesSameMinute: Math.max(0, ...Object.values(perMinute)),
+      approachSec: {
+        max: round(Math.max(0, ...approachMin.map((m) => m * 60)), 0),
+        avg: round(approachMin.length ? (approachMin.reduce((a, b) => a + b, 0) / approachMin.length) * 60 : 0, 0),
+      },
       approachMin: {
         max: round(Math.max(0, ...approachMin), 1),
         avg: round(approachMin.length ? approachMin.reduce((a, b) => a + b, 0) / approachMin.length : 0, 1),

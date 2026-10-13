@@ -48,9 +48,25 @@ export interface Truck {
   path: string[];
   /** Puntos de ruta en metros. */
   route: Point[];
+  /** Velocidad actual (m/s, sin signo). */
   speed: number;
   /** Rumbo en radianes (la tractora mira a −Z con rotación 0). */
-  heading?: number;
+  heading: number;
+  /** Velocidad con signo: positiva avanza, negativa marcha atrás. */
+  v: number;
+  /**
+   * Fase de la conducción: carril, arco de atraque, marcha atrás hasta el muelle, salida del muelle
+   * y salida de una plaza de espera en marcha atrás.
+   */
+  stage?: 'lane' | 'arc' | 'reverse' | 'pullout' | 'unpark';
+  /** Segundos de espera restantes (báscula). */
+  dwell: number;
+  /** Plaza de espera ocupada (índice en `layout.site.truckParking.stalls`). */
+  stallId: string | null;
+  /** Ruta que sigue a la actual (tras salir de la plaza en marcha atrás). */
+  nextRoute: Point[];
+  /** Muelle del que sale (mientras hace la maniobra de salida). */
+  fromDockId: string | null;
   /** 0..1 de avance de descarga/carga en el muelle. */
   progress: number;
   cargoPaletIds: string[];
@@ -233,6 +249,17 @@ export interface SimState {
   storedByZone: Record<'seco' | 'frio' | 'congelado', number>;
   /** Acumulador de intervalos para la generación de trabajo. */
   genTimer: number;
+
+  /** Plaza de espera de semirremolques → camión que la ocupa. */
+  stallOccupancy: Record<string, string>;
+  /** Última entrada por la garita (separación mínima entre camiones). */
+  lastGateAt: number;
+  /** Camión que ocupa la báscula (un único puesto). */
+  scaleTruckId: string | null;
+  /** Última salida de una plaza de espera hacia un muelle (se escalonan). */
+  lastStallExitAt: number;
+  /** Última máquina que dejó su plaza de la sala para trabajar (se liberan de una en una). */
+  lastSpotReleaseAt: number;
 }
 
 export interface Machine {
@@ -263,6 +290,8 @@ export interface Machine {
   carriedPalets: string[];
   batteryEventSent: boolean;
   waitingOnce: boolean;
+  /** Segundos tras el inicio de turno antes de aceptar tareas (fichaje escalonado). */
+  clockInDelay: number;
 }
 
 export interface SimContext {

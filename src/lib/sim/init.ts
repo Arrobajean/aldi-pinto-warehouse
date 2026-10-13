@@ -4,6 +4,7 @@ import { forEachRackSlot } from '@/lib/layout/pinto-layout';
 import { SIM_START_TS } from '@/lib/sim/clock';
 import { generateDemand } from '@/lib/sim/demand';
 import { buildSlotPositions } from '@/lib/sim/positions';
+import { seedYard } from '@/lib/sim/trucks';
 import { shiftAt, type Machine, type Pallet, type SimState } from '@/lib/sim/types';
 
 const ZONE_TEMP: Record<ZoneId, 'dry' | 'cool' | 'frozen'> = {
@@ -135,6 +136,8 @@ export function createInitialState(layout: WarehouseLayout, seed = 20260301): Si
         carriedPalets: [],
         batteryEventSent: false,
         waitingOnce: false,
+        // Fichaje escalonado: cada operario tarda 0–150 s en empezar a aceptar tareas.
+        clockInDelay: rng() * 150,
       });
     }
   }
@@ -150,7 +153,7 @@ export function createInitialState(layout: WarehouseLayout, seed = 20260301): Si
   // Palets de FyV en el suelo se conservan como picking (no en rack).
   const startTs = SIM_START_TS;
 
-  return {
+  const state: SimState = {
     ts: startTs,
     running: true,
     speed: 1,
@@ -186,18 +189,17 @@ export function createInitialState(layout: WarehouseLayout, seed = 20260301): Si
     freeL0ByZone,
     storedByZone,
     genTimer: 0,
+    stallOccupancy: {},
+    lastGateAt: startTs - 3600,
+    scaleTruckId: null,
+    lastStallExitAt: startTs - 3600,
+    lastSpotReleaseAt: startTs - 3600,
   };
+  // El turno no empieza con el patio vacío: camiones en espera y descargando.
+  seedYard(state, layout);
+  return state;
 }
 
 export { mulberry };
 
-/** RNG con estado serializable (contador) para uso dentro del bucle. */
-export function nextRandom(state: { rngState: number }): number {
-  let a = state.rngState >>> 0;
-  a |= 0;
-  a = (a + 0x6d2b79f5) | 0;
-  let t = Math.imul(a ^ (a >>> 15), 1 | a);
-  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-  state.rngState = ((t ^ (t >>> 14)) >>> 0);
-  return state.rngState / 4294967296;
-}
+export { nextRandom } from '@/lib/sim/rng';

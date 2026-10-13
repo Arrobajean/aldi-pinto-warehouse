@@ -58,7 +58,7 @@ export function buildRacks(layout: WarehouseLayout): RacksModel {
   // --- Puntales ---
   const posts: { x: number; z: number; height: number }[] = [];
   for (const line of layout.rackLines) {
-    const postHeight = line.levels * LEVEL_HEIGHT + 0.6;
+    const postHeight = line.levels * LEVEL_HEIGHT;
     for (const seg of line.segments) {
       for (let m = 0; m <= seg.moduleCount; m++) {
         const z = seg.zStart + m * MODULE;
@@ -90,11 +90,16 @@ export function buildRacks(layout: WarehouseLayout): RacksModel {
     for (const seg of line.segments) {
       for (let m = 0; m < seg.moduleCount; m++) {
         const z0 = seg.zStart + m * MODULE;
-        for (let level = 1; level <= line.levels; level++) {
+        // Largueros donde apoyan los niveles 1 y 2 (1,6 y 3,2 m).
+        for (let level = 1; level < line.levels; level++) {
           const y = level * LEVEL_HEIGHT;
           beams.push({ x: line.xCenter - dx, y, z: z0, len: MODULE - 0.05 });
           beams.push({ x: line.xCenter + dx, y, z: z0, len: MODULE - 0.05 });
         }
+        // Travesaño superior ligero que cierra el marco (un larguero por lado).
+        const topY = line.levels * LEVEL_HEIGHT - 0.1;
+        beams.push({ x: line.xCenter - dx, y: topY, z: z0, len: MODULE - 0.05 });
+        beams.push({ x: line.xCenter + dx, y: topY, z: z0, len: MODULE - 0.05 });
       }
     }
   }

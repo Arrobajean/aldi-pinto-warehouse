@@ -138,6 +138,7 @@ export function WarehouseApp() {
 
         <CameraControls
           zoomLevel={w.zoomLevel}
+          wallMode={w.wallMode}
           onRotate={(dir) => w.acciones.rotate(dir)}
           onZoom={(level) => w.acciones.setZoom(level)}
           onWallMode={() => w.acciones.cycleWallMode()}

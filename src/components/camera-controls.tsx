@@ -2,9 +2,11 @@
 
 import { RotateCcw, RotateCw, Maximize2, Boxes } from 'lucide-react';
 import type { SimsZoomLevel } from '@/three/sims-camera';
+import type { WallMode } from '@/three/wall-modes';
 
 interface CameraControlsProps {
   zoomLevel: SimsZoomLevel;
+  wallMode: WallMode;
   onRotate: (dir: 1 | -1) => void;
   onZoom: (level: SimsZoomLevel) => void;
   onWallMode: () => void;
@@ -14,7 +16,9 @@ interface CameraControlsProps {
 const btn =
   'flex h-9 w-10 items-center justify-center rounded-lg border border-line bg-panel text-fg shadow-card transition-colors hover:border-accent hover:bg-panel-strong';
 
-export function CameraControls({ zoomLevel, onRotate, onZoom, onWallMode, onReset }: CameraControlsProps) {
+const WALL_MODE_LABELS: Record<WallMode, string> = { up: 'completos', cut: 'recorte', down: 'bajados' };
+
+export function CameraControls({ zoomLevel, wallMode, onRotate, onZoom, onWallMode, onReset }: CameraControlsProps) {
   return (
     <div className="absolute right-3 bottom-3 z-30 flex flex-col gap-1.5">
       <div className="flex justify-end gap-1.5">
@@ -38,7 +42,11 @@ export function CameraControls({ zoomLevel, onRotate, onZoom, onWallMode, onRese
         ))}
       </div>
       <div className="flex justify-end gap-1.5">
-        <button className={btn} title="Modo de muros (M)" onClick={onWallMode}>
+        <button
+          className={`${btn} ${wallMode !== 'up' ? 'border-accent !text-accent' : ''}`}
+          title={`Modo de muros (M): ${WALL_MODE_LABELS[wallMode]}`}
+          onClick={onWallMode}
+        >
           <Boxes size={15} />
         </button>
         <button className={btn} title="Vista general (F)" onClick={onReset}>

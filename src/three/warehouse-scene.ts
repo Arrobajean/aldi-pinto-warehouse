@@ -4,7 +4,7 @@ import type { WarehouseLayout } from '@/lib/layout/types';
 import { buildPintoLayout } from '@/lib/layout/pinto-layout';
 import type { SimState } from '@/lib/sim/types';
 import { SimsCamera, type SimsZoomLevel } from '@/three/sims-camera';
-import { applyWallMode, updateRackScale, updateWalls, type WallMode } from '@/three/wall-modes';
+import { applyWallMode, updateWalls, type WallMode } from '@/three/wall-modes';
 import { EntitySync } from '@/three/entity-sync';
 import { RtlsLayers } from '@/three/rtls-layers';
 import { createBrandDecal, loadBranding } from '@/three/branding';
@@ -88,7 +88,6 @@ export class WarehouseScene {
   private simStateRef: SimState | null = null;
   private rtlsLayers: RtlsLayers | null = null;
   private racksModel: RacksModel | null = null;
-  private racksGroup: THREE.Group | null = null;
   private slotPos = new Map<string, { x: number; y: number; z: number }>();
   private highlight: THREE.Mesh | null = null;
   private highlightUntil = 0;
@@ -168,7 +167,6 @@ export class WarehouseScene {
 
     const racksGroup = new THREE.Group();
     racksGroup.name = 'racks';
-    this.racksGroup = racksGroup;
     this.racksModel = buildRacks(layout);
     racksGroup.add(this.racksModel.group);
     this.scene.add(racksGroup);
@@ -619,7 +617,6 @@ export class WarehouseScene {
     const dt = Math.min(this.clock.getDelta(), 0.1);
     this.camera.update(dt);
     updateWalls(this.walls, dt);
-    updateRackScale(this.racksGroup, this.wallMode, dt);
 
     // Seguimiento de entidad con la cámara.
     const followId = this.camera.followId;

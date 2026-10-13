@@ -33,8 +33,8 @@ const BACK_GAP = 0.2;
 const PITCH = RACK_DEPTH * 2 + BACK_GAP + AISLE_WIDTH; // 5,6 m
 const MODULE = 2.7; // frente de módulo: 3 palets de 0,8 m
 const SLOT_WIDTH = 0.8;
-/** Niveles de estantería unificados (nivel 0 = picking, 1..3 = reserva) y altura de cada nivel. */
-export const RACK_LEVELS = 4;
+/** Niveles de estantería unificados (nivel 0 = picking, 1..2 = reserva) y altura de cada nivel. */
+export const RACK_LEVELS = 3;
 export const LEVEL_HEIGHT = 1.6;
 
 /** RNG determinista con semilla fija (mulberry32). */

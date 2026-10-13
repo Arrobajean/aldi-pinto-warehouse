@@ -65,28 +65,3 @@ export function updateWalls(walls: WallMesh[], dt: number) {
     }
   }
 }
-/**
- * Altura relativa de las estanterías según el modo. Con 4 niveles (≈6,4 m) las estanterías
- * tapan los pasillos desde la vista isométrica; en recorte se bajan para ver las máquinas.
- */
-export function rackHeightScale(mode: WallMode): number {
-  switch (mode) {
-    case 'down':
-      return 0.12;
-    case 'cut':
-      return 0.3;
-    case 'up':
-    default:
-      return 1;
-  }
-}
-
-/** Anima la escala vertical del grupo de estanterías hacia el modo activo. */
-export function updateRackScale(group: { scale: { y: number } } | null, mode: WallMode, dt: number) {
-  if (!group) return;
-  const k = 8;
-  const a = 1 - Math.exp(-k * dt);
-  const target = rackHeightScale(mode);
-  group.scale.y += (target - group.scale.y) * a;
-  if (Math.abs(target - group.scale.y) < 0.0005) group.scale.y = target;
-}

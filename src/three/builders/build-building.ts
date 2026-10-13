@@ -1,10 +1,14 @@
 import * as THREE from 'three';
 import type { Dock, DockFace, Rect, WarehouseLayout } from '@/lib/layout/types';
 import { FACE_V, dockU, faceXZ } from '@/lib/layout/dock-geometry';
-import { box, lambert } from '@/three/builders/utils';
+import { box, lambert, plane } from '@/three/builders/utils';
 import {
   concreteFloor,
   concreteMaterial,
+  MARK_Y,
+  NAVE_LINE_Y,
+  NAVE_SLAB_Y,
+  NAVE_TINT_Y,
   paintArrow,
   paintFill,
   paintLine,
@@ -30,10 +34,10 @@ export interface BuildingModel {
 }
 
 const WALL_THICKNESS = 0.4;
-/** Pasillos transversales: franja clara bajo sus bordes amarillos; contorno de cada zona de estantería. */
+/** Pasillos transversales: franja clara bajo sus bordes amarillos. */
 const CROSS_AISLE_TONE = 0xb4bcc6;
-const CROSS_AISLE_Y = 0.024;
-const ZONE_LINE_Y = 0.026;
+/** Franjas de la mancha de andén y del antesala, justo por encima de las marcas de calle. */
+const ANTESALA_STRIP_Y = MARK_Y + 0.005;
 /** Ancho dibujado de cada calle de pre-carga (los muelles están cada 3,5 m dentro de cada bloque). */
 const LANE_DRAW_WIDTH = 2.2;
 
@@ -142,26 +146,33 @@ export function dockBlocks(docks: Pick<Dock, 'face' | 'x' | 'z' | 'temp'>[]): Do
 function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
   const group = new THREE.Group();
 
+  // Una sola base de hormigón opaca para toda la nave: antes cada zona tenía su losa y la de carga se solapaba con la de seco (z-fighting).
+  const { rect } = layout.building;
+  const baseW = rect.xMax - rect.xMin;
+  const baseD = rect.zMax - rect.zMin;
+  group.add(concreteFloor(baseW, baseD, (rect.xMin + rect.xMax) / 2, NAVE_SLAB_Y, (rect.zMin + rect.zMax) / 2, 'nave-base'));
+  // Zonas: áreas invisibles (no escriben color ni profundidad) que solo sirven para elegir zona con el ratón.
   for (const zone of layout.zones) {
     const w = zone.rect.xMax - zone.rect.xMin;
     const d = zone.rect.zMax - zone.rect.zMin;
     const cx = (zone.rect.xMin + zone.rect.xMax) / 2;
     const cz = (zone.rect.zMin + zone.rect.zMax) / 2;
-    const floor = concreteFloor(w, d, cx, 0.02, cz, `floor-${zone.id}`);
-    floor.userData.zoneId = zone.id;
-    floor.userData.zone = zone;
-    group.add(floor);
+    const hit = plane(w, d, new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }), cx, NAVE_SLAB_Y, cz);
+    hit.name = `zona-${zone.id}`;
+    hit.userData.zoneId = zone.id;
+    hit.userData.zone = zone;
+    group.add(hit);
   }
 
   // Zonas de estantería: contorno de su color para separarlas a simple vista.
   for (const zone of layout.zones) {
     if (zone.storage !== 'rack') continue;
     const r = zone.rect;
-    paintOutline(group, r.xMin + 0.25, r.xMax - 0.25, r.zMin + 0.25, r.zMax - 0.25, parseInt(zone.color.slice(1), 16), 0.5, ZONE_LINE_Y);
+    paintOutline(group, r.xMin + 0.25, r.xMax - 0.25, r.zMin + 0.25, r.zMax - 0.25, parseInt(zone.color.slice(1), 16), 0.5, NAVE_LINE_Y);
   }
   // Pasillos transversales: franja más clara entre sus bordes amarillos.
   for (const ca of layout.crossAisles) {
-    group.add(paintFill(ca.xMax - ca.xMin, ca.zMax - ca.zMin, CROSS_AISLE_TONE, (ca.xMin + ca.xMax) / 2, (ca.zMin + ca.zMax) / 2, CROSS_AISLE_Y));
+    group.add(paintFill(ca.xMax - ca.xMin, ca.zMax - ca.zMin, CROSS_AISLE_TONE, (ca.xMin + ca.xMax) / 2, (ca.zMin + ca.zMax) / 2, NAVE_TINT_Y));
   }
 
   // Salas de carga y de reposo: contorno y plazas pintadas sobre el hormigón.
@@ -331,8 +342,8 @@ function buildDockFurniture(layout: WarehouseLayout): THREE.Group {
       vol.position.set(r.cx, H + 1.6, r.cz);
       vol.name = `antesala-${block.temp}`;
       group.add(vol);
-      group.add(planeUV(face, block.uMin - 1.9, block.uMax + 1.9, vIn + 0.15, vIn + 0.65, tint, H + 0.04));
-      group.add(planeUV(face, block.uMin - 1.9, block.uMax + 1.9, vOut - 0.5, vOut - 0.25, tint, H + 0.04));
+      group.add(planeUV(face, block.uMin - 1.9, block.uMax + 1.9, vIn + 0.15, vIn + 0.65, tint, H + ANTESALA_STRIP_Y));
+      group.add(planeUV(face, block.uMin - 1.9, block.uMax + 1.9, vOut - 0.5, vOut - 0.25, tint, H + ANTESALA_STRIP_Y));
       const panelMat = lambert(0x6fa8d6, { transparent: true, opacity: 0.6 });
       group.add(boxUV(face, block.uMin - 1.9 - 0.075, block.uMin - 1.9 + 0.075, vIn, vOut, H, H + 3.2, panelMat));
       group.add(boxUV(face, block.uMax + 1.9 - 0.075, block.uMax + 1.9 + 0.075, vIn, vOut, H, H + 3.2, panelMat));

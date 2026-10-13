@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Rect, WarehouseLayout } from '@/lib/layout/types';
 import { box, lambert, plane } from '@/three/builders/utils';
-import { concreteFloor, paintLine, PAINT_WHITE } from '@/three/builders/floor';
+import { concreteFloor, paintLine, PAINT_WHITE, YARD_MARK_Y, YARD_SLAB_Y } from '@/three/builders/floor';
 import { DOCK_FACE_Z, dockBlocks, dockStairX } from '@/three/builders/build-building';
 import { FACE_V, dockU, faceXZ } from '@/lib/layout/dock-geometry';
 
@@ -41,7 +41,7 @@ function buildRoads(group: THREE.Group, layout: WarehouseLayout) {
   // Patio de maniobra frente a los muelles.
   // Patio de maniobra: hormigón industrial (no asfalto).
   const yc = asRect(layout.site.yard);
-  group.add(concreteFloor(yc.w, yc.d, yc.x, 0.05, yc.z, 'yard'));
+  group.add(concreteFloor(yc.w, yc.d, yc.x, YARD_SLAB_Y, yc.z, 'yard'));
 }
 
 function buildMarkings(group: THREE.Group, layout: WarehouseLayout) {
@@ -54,7 +54,7 @@ function buildMarkings(group: THREE.Group, layout: WarehouseLayout) {
     for (const du of [-0.45, 0, 0.45]) {
       const a = faceXZ(block.face, su + du, FACE_V[block.face] + 0.2);
       const b = faceXZ(block.face, su + du, FACE_V[block.face] + 6);
-      paintLine(group, a.x, a.z, b.x, b.z, PAINT_WHITE, 0.35);
+      paintLine(group, a.x, a.z, b.x, b.z, PAINT_WHITE, 0.35, YARD_MARK_Y);
     }
   }
 
@@ -75,7 +75,7 @@ function buildMarkings(group: THREE.Group, layout: WarehouseLayout) {
   const s = new THREE.Vector3(1, 1, 1);
   const p = new THREE.Vector3();
   dockMarks.forEach((mark, i) => {
-    p.set(mark.x, 0.06, mark.z);
+    p.set(mark.x, YARD_MARK_Y, mark.z);
     m.compose(p, mark.east ? qEast : q, s);
     dockMesh.setMatrixAt(i, m);
   });
@@ -92,7 +92,7 @@ function buildMarkings(group: THREE.Group, layout: WarehouseLayout) {
   const stallGeo = new THREE.BoxGeometry(0.15, 0.01, 0.6);
   const stallMesh = instanced(stallGeo, white, stallMarks.length);
   stallMarks.forEach((mark, i) => {
-    p.set(mark.x, 0.06, mark.z);
+    p.set(mark.x, YARD_MARK_Y, mark.z);
     m.compose(p, q, s);
     stallMesh.setMatrixAt(i, m);
   });

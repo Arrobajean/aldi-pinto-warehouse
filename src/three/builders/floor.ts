@@ -8,8 +8,17 @@ export const SAFETY_YELLOW = 0xf2c230;
 export const PAINT_WHITE = 0xe8ecf0;
 /** Metros que cubre una loseta de la textura de hormigón. */
 const TILE_M = 6;
-/** Altura a la que se pintan las marcas por encima del hormigón. */
-export const MARK_Y = 0.03;
+/**
+ * Alturas de cada capa de suelo (m). Ninguna losa comparte altura con otra que se solape:
+ * - nave: base de hormigón opaca sobre el zócalo de 1,2 m, marcas de zona y de pasillo, y marcas de calle;
+ * - patio: losa 5 cm sobre el terreno y sus marcas por encima.
+ */
+export const NAVE_SLAB_Y = 0.02;
+export const NAVE_TINT_Y = 0.03;
+export const NAVE_LINE_Y = 0.035;
+export const MARK_Y = 0.04;
+export const YARD_SLAB_Y = 0.05;
+export const YARD_MARK_Y = 0.06;
 
 let concreteTex: THREE.CanvasTexture | null = null;
 
@@ -76,7 +85,11 @@ export function concreteTexture(): THREE.CanvasTexture {
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  // Anisotropía máxima; three.js la limita al máximo de la GPU.
+  tex.anisotropy = 16;
   concreteTex = tex;
   return tex;
 }
@@ -97,10 +110,14 @@ export function concreteFloor(w: number, d: number, x: number, y: number, z: num
   return mesh;
 }
 
+/** Material de las marcas: decal con el mismo desplazamiento de profundidad en todas las capas. */
+function decalMaterial(color: number) {
+  return new THREE.MeshLambertMaterial({ color, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
+}
+
 /** Mancha de pintura plana (relleno) sobre el hormigón. */
 export function paintFill(w: number, d: number, color: number, x: number, z: number, y = MARK_Y): THREE.Mesh {
-  const mat = new THREE.MeshLambertMaterial({ color, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-  const mesh = plane(w, d, mat, x, y, z);
+  const mesh = plane(w, d, decalMaterial(color), x, y, z);
   mesh.receiveShadow = false;
   return mesh;
 }
@@ -138,8 +155,7 @@ export function paintArrow(group: THREE.Group, x: number, z: number, dirZ: 1 | -
   shape.lineTo(-0.25 * scale, 0.1 * scale);
   shape.closePath();
   const geo = new THREE.ShapeGeometry(shape);
-  const mat = new THREE.MeshLambertMaterial({ color, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-  const mesh = new THREE.Mesh(geo, mat);
+  const mesh = new THREE.Mesh(geo, decalMaterial(color));
   // Plano XY -> XZ: rotación −90° en X; el "arriba" de la flecha queda en −Z con dirZ = 1.
   mesh.rotation.x = -Math.PI / 2;
   mesh.rotation.z = dirZ === 1 ? Math.PI : 0;

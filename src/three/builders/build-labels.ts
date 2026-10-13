@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { WarehouseLayout } from '@/lib/layout/types';
+import { FACE_V, dockU, faceXZ } from '@/lib/layout/dock-geometry';
 
 function makeTextTexture(text: string, opts: { font?: string; size?: number; color?: string; bg?: string | null; width?: number; height?: number }) {
   const { font = '600 42px Plus Jakarta Sans, sans-serif', size = 42, color = '#12203a', bg = 'rgba(240,244,250,0.85)', width = 1024, height = 128 } = opts;
@@ -44,7 +45,8 @@ export function buildDockLabels(layout: WarehouseLayout): THREE.Group {
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
     sprite.scale.set(3.2, 1.2, 1);
     // Sobre la marquesina (4,45 m) para no quedar dentro del remolque ni de la cubierta.
-    sprite.position.set(dock.x, 5.0, 81.2);
+    const c = faceXZ(dock.face, dockU(dock), FACE_V[dock.face] + 1.2);
+    sprite.position.set(c.x, 5.0, c.z);
     sprite.renderOrder = 3;
     group.add(sprite);
   }

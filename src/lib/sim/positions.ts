@@ -2,6 +2,7 @@ import type { Point } from '@/lib/sim/types';
 import type { Dock, WarehouseLayout } from '@/lib/layout/types';
 import type { ZoneId } from '@/lib/types';
 import { forEachRackSlot } from '@/lib/layout/pinto-layout';
+import { INTERIOR_DEPTH, LANE_DEPTH, dockPoint } from '@/lib/layout/dock-geometry';
 
 export const RACK_ZONE_OF_TEMP: Record<'dry' | 'cool' | 'frozen', 'seco' | 'frio' | 'congelado'> = {
   dry: 'seco',
@@ -25,12 +26,12 @@ export function reserveZone(temp: 'dry' | 'cool' | 'frozen'): 'seco' | 'frio' | 
 
 /** Punto de recogida/entrega de palets en Expedición (frente de la calle de un muelle). */
 export function stagingPoint(dock: Dock): Point {
-  return { x: dock.x, z: 58 };
+  return dockPoint(dock, 0, LANE_DEPTH[dock.face].stage);
 }
 
 /** Frente interior de un muelle (lado nave). */
 export function dockInteriorPoint(dock: Dock): Point {
-  return { x: dock.x, z: 78 };
+  return dockPoint(dock, 0, INTERIOR_DEPTH);
 }
 
 /** En el aparcamiento de semirremolques (espera de muelle). */

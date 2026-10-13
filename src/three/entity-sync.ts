@@ -5,6 +5,7 @@ import type { Machine, SimState, Truck } from '@/lib/sim/types';
 import { createErE225i, createOrderPicker, createPalletTruck, createReachTruck, createTruck } from '@/three/builders/models';
 import type { RacksModel } from '@/three/builders/build-racks';
 import { DOCK_EDGE_Z, DOCK_FACE_Z, NAVE_FLOOR_H } from '@/three/builders/build-building';
+import { FACE_V, LANE_DEPTH, dockPoint, dockU, faceNormal, faceXZ } from '@/lib/layout/dock-geometry';
 import { newKin, stepBike, stepKin, type BikeOpts, type BikeState, type Kin, type KinOpts } from '@/three/motion';
 
 /** Sube al GPU solo el rango de instancias modificado en este fotograma. */
@@ -386,9 +387,15 @@ export class EntitySync {
     let dist: number;
     if (docking && dock) {
       if (!ref.dockStage) ref.dockStage = 'lane';
-      const T = { x: dock.x, z: DOCK_TRUCK_Z };
-      const START = { x: dock.x + TRUCK_MIN_RADIUS, z: YARD_LANE_Z };
-      const STOP = { x: dock.x, z: DOCK_STAGE_Z };
+      // Maniobra en la cara del muelle: u a lo largo de la fachada y v hacia fuera (sur: z; este: x).
+      const f = dock.face;
+      const u = dockU(dock);
+      const outside = (zAbs: number) => faceXZ(f, u, FACE_V[f] + (zAbs - DOCK_FACE_Z));
+      const T = outside(DOCK_TRUCK_Z);
+      const START = faceXZ(f, u + TRUCK_MIN_RADIUS, FACE_V[f] + (YARD_LANE_Z - DOCK_FACE_Z));
+      const STOP = outside(DOCK_STAGE_Z);
+      const n = faceNormal(f);
+      const alignTo = Math.atan2(-n.x, -n.z);
       if (ref.dockStage === 'lane' && planDist(b, START) < 0.5) ref.dockStage = 'arc';
       if (ref.dockStage === 'arc' && planDist(b, STOP) < 1.0) ref.dockStage = 'reverse';
       if (ref.dockStage === 'lane') {
@@ -397,7 +404,7 @@ export class EntitySync {
         dist = stepBike(b, STOP.x, STOP.z, TRUCK_MANEUVER_V, false, dt, TRUCK_BIKE);
       } else {
         // Marcha atrás en línea recta; la corrección final alinea el rumbo con la pose de atraque.
-        dist = stepBike(b, T.x, T.z, TRUCK_REVERSE_V, true, dt, TRUCK_BIKE, Math.PI);
+        dist = stepBike(b, T.x, T.z, TRUCK_REVERSE_V, true, dt, TRUCK_BIKE, alignTo);
       }
     } else {
       ref.dockStage = undefined;
@@ -486,7 +493,8 @@ export class EntitySync {
         const row = Math.floor(i / 2) % LANE_ROWS;
         const layer = Math.floor(i / (2 * LANE_ROWS));
         if (layer >= MAX_FLOOR_LAYERS) return;
-        this.placePaletAt(state, pid, dock.x + (col - 0.5) * 1.25, FLOOR_PALET_Y + layer * 0.5, 58 + row * 0.9, 0);
+        const spot = dockPoint(dock, (col - 0.5) * 1.25, LANE_DEPTH[dock.face].stage - row * 0.9);
+        this.placePaletAt(state, pid, spot.x, FLOOR_PALET_Y + layer * 0.5, spot.z, 0);
       });
     }
 

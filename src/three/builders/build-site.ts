@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { Rect, WarehouseLayout } from '@/lib/layout/types';
 import { box, lambert, plane } from '@/three/builders/utils';
 import { concreteFloor, paintLine, PAINT_WHITE } from '@/three/builders/floor';
-import { DOCK_EDGE_Z, dockBlocks, dockStairX } from '@/three/builders/build-building';
+import { DOCK_FACE_Z, dockBlocks, dockStairX } from '@/three/builders/build-building';
+import { FACE_V, dockU, faceXZ } from '@/lib/layout/dock-geometry';
 
 const ASPHALT = 0x3a4149;
 const GROUND = 0x474a45;
@@ -49,27 +50,33 @@ function buildMarkings(group: THREE.Group, layout: WarehouseLayout) {
 
   // Paso peatonal (cebra blanca) desde la escalera de cada bloque de muelles hacia el patio.
   for (const block of dockBlocks(layout.docks)) {
-    const stepX = dockStairX(block);
-    for (const dx of [-0.45, 0, 0.45]) {
-      paintLine(group, stepX + dx, DOCK_EDGE_Z + 0.2, stepX + dx, DOCK_EDGE_Z + 6, PAINT_WHITE, 0.35);
+    const su = dockStairX(block);
+    for (const du of [-0.45, 0, 0.45]) {
+      const a = faceXZ(block.face, su + du, FACE_V[block.face] + 0.2);
+      const b = faceXZ(block.face, su + du, FACE_V[block.face] + 6);
+      paintLine(group, a.x, a.z, b.x, b.z, PAINT_WHITE, 0.35);
     }
   }
 
   // Marcos amarillos de los muelles en el patio.
-  const dockMarks: { x: number; z: number }[] = [];
+  const dockMarks: { x: number; z: number; east: boolean }[] = [];
   for (const dock of layout.docks) {
-    // Marcas de estacionamiento de camiones en el patio, a partir del borde del andén (z=82,4).
-    for (const dz of [84.5, 89.5, 94.5, 99.5]) dockMarks.push({ x: dock.x - 1.25, z: dz });
+    // Marcas de estacionamiento de camiones en el patio, a partir del borde del andén (z=82,4 en la cara sur).
+    for (const dv of [84.5, 89.5, 94.5, 99.5]) {
+      const c = faceXZ(dock.face, dockU(dock) - 1.25, FACE_V[dock.face] + (dv - DOCK_FACE_Z));
+      dockMarks.push({ x: c.x, z: c.z, east: dock.face === 'east' });
+    }
   }
   const dockGeo = new THREE.BoxGeometry(0.12, 0.01, 0.6);
   const dockMesh = instanced(dockGeo, yellow, dockMarks.length);
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
+  const qEast = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
   const s = new THREE.Vector3(1, 1, 1);
   const p = new THREE.Vector3();
   dockMarks.forEach((mark, i) => {
     p.set(mark.x, 0.06, mark.z);
-    m.compose(p, q, s);
+    m.compose(p, mark.east ? qEast : q, s);
     dockMesh.setMatrixAt(i, m);
   });
   dockMesh.instanceMatrix.needsUpdate = true;

@@ -58,16 +58,21 @@ export interface Aisle {
   xCenter: number;
 }
 
+/** Cara de la nave donde está la puerta (ver dock-geometry.ts). */
+export type DockFace = 'south' | 'east';
+
 export interface Dock {
   id: string;
   index: number;
-  /** Centro x de la puerta. */
+  face: DockFace;
+  /** Centro de la puerta (x = 125 en la fachada este; z = 80 en la sur). */
   x: number;
+  z: number;
   kind: 'inbound' | 'outbound';
   temp: 'dry' | 'cool' | 'frozen';
   doorWidth: number;
   levelerDepth: number;
-  /** Calle de pre-carga pintada en Expedición. */
+  /** Calle de pre-carga pintada en Expedición (tramo sur) o en la batería este. */
   laneRect: Rect;
 }
 

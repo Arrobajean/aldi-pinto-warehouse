@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import type { Rect, WarehouseLayout } from '@/lib/layout/types';
+import type { Dock, DockFace, Rect, WarehouseLayout } from '@/lib/layout/types';
+import { FACE_V, dockU, faceXZ } from '@/lib/layout/dock-geometry';
 import { box, lambert } from '@/three/builders/utils';
 import {
   concreteFloor,
@@ -39,13 +40,21 @@ export const DOCK_EDGE_Z = 82.4;
 const STAIR_RISERS = 4;
 const STAIR_RISE = NAVE_FLOOR_H / STAIR_RISERS;
 const STAIR_TREAD = 0.5;
-/** Escalera peatonal de un bloque de muelles: a la izquierda del bloque, fuera del ancho de los remolques. */
-export function dockStairX(block: { xMin: number }): number {
-  return block.xMin - 2.6;
+/** Pasillo de servicio del tramo este: hueco en los muros que lo cruzan (x entre 106,5 y 113,5). */
+const EAST_CORRIDOR_OPEN = { xMin: 106.5, xMax: 113.5 };
+
+interface Span {
+  xMin: number;
+  xMax: number;
 }
 
-function segmentsWithHoles(xMin: number, xMax: number, holes: { xMin: number; xMax: number }[], step = 0.25): { xMin: number; xMax: number }[] {
-  const segs: { xMin: number; xMax: number }[] = [];
+/** Escalera peatonal de un bloque de muelles: a un lado del bloque, fuera del ancho de los remolques. */
+export function dockStairX(block: { uMin: number }): number {
+  return block.uMin - 2.6;
+}
+
+function segmentsWithHoles(xMin: number, xMax: number, holes: Span[], step = 0.25): Span[] {
+  const segs: Span[] = [];
   let start = xMin;
   for (let x = xMin; x <= xMax + step; x += step) {
     const inside = holes.some((h) => x >= h.xMin && x <= h.xMax);
@@ -58,16 +67,64 @@ function segmentsWithHoles(xMin: number, xMax: number, holes: { xMin: number; xM
   return segs;
 }
 
-/** Bloques contiguos de muelles (separados por un hueco de maniobra): una plataforma por bloque. */
-export function dockBlocks(docks: { x: number; temp: string }[]): { xMin: number; xMax: number; temp: string }[] {
-  const sorted = [...docks].sort((a, b) => a.x - b.x);
-  const blocks: { xMin: number; xMax: number; temp: string }[] = [];
-  for (const d of sorted) {
-    const last = blocks[blocks.length - 1];
-    if (last && d.x - last.xMax < 4.5 && last.temp === d.temp) {
-      last.xMax = d.x;
-    } else {
-      blocks.push({ xMin: d.x, xMax: d.x, temp: d.temp });
+/** Muro a lo largo de x, en la línea z; `holes` son huecos en x. Altura completa `height` desde el piso de la nave. */
+function wallAlongX(x0: number, x1: number, z: number, height: number, mat: THREE.Material, holes: Span[], normalZ: number): WallMesh[] {
+  return segmentsWithHoles(x0, x1, holes).map((seg) => ({
+    mesh: box(seg.xMax - seg.xMin, height, WALL_THICKNESS, mat, (seg.xMin + seg.xMax) / 2, height / 2, z),
+    fullTop: height,
+    normal: { x: 0, z: normalZ },
+  }));
+}
+
+/** Muro a lo largo de z, en la línea x; `holes` son huecos en z. */
+function wallAlongZ(z0: number, z1: number, x: number, height: number, mat: THREE.Material, holes: Span[], normalX: number): WallMesh[] {
+  return segmentsWithHoles(z0, z1, holes).map((seg) => ({
+    mesh: box(WALL_THICKNESS, height, seg.xMax - seg.xMin, mat, x, height / 2, (seg.xMin + seg.xMax) / 2),
+    fullTop: height,
+    normal: { x: normalX, z: 0 },
+  }));
+}
+
+/** Rectángulo en coordenadas de cara: u a lo largo de la fachada, v perpendicular a ella. */
+function rectUV(face: DockFace, u0: number, u1: number, v0: number, v1: number) {
+  const a = faceXZ(face, u0, v0);
+  const b = faceXZ(face, u1, v1);
+  return { cx: (a.x + b.x) / 2, cz: (a.z + b.z) / 2, w: Math.abs(b.x - a.x), d: Math.abs(b.z - a.z) };
+}
+
+function boxUV(face: DockFace, u0: number, u1: number, v0: number, v1: number, y0: number, y1: number, mat: THREE.Material): THREE.Mesh {
+  const r = rectUV(face, u0, u1, v0, v1);
+  return box(r.w, y1 - y0, r.d, mat, r.cx, (y0 + y1) / 2, r.cz);
+}
+
+function planeUV(face: DockFace, u0: number, u1: number, v0: number, v1: number, color: number, y: number): THREE.Mesh {
+  const r = rectUV(face, u0, u1, v0, v1);
+  return paintFill(r.w, r.d, color, r.cx, r.cz, y);
+}
+
+/** Bloques contiguos de muelles de la misma cara y temperatura (separados por un hueco de maniobra). */
+export interface DockBlock {
+  face: DockFace;
+  /** Extremos de la cara a lo largo de la fachada (x en el sur, z en el este). */
+  uMin: number;
+  uMax: number;
+  temp: string;
+}
+
+export function dockBlocks(docks: Pick<Dock, 'face' | 'x' | 'z' | 'temp'>[]): DockBlock[] {
+  const blocks: DockBlock[] = [];
+  for (const face of ['south', 'east'] as const) {
+    const sorted = docks
+      .filter((d) => d.face === face)
+      .map((d) => ({ u: dockU({ face, x: d.x, z: d.z }), temp: d.temp }))
+      .sort((a, b) => a.u - b.u);
+    for (const d of sorted) {
+      const last = blocks[blocks.length - 1];
+      if (last && last.face === face && d.u - last.uMax < 4.5 && last.temp === d.temp) {
+        last.uMax = d.u;
+      } else {
+        blocks.push({ face, uMin: d.u, uMax: d.u, temp: d.temp });
+      }
     }
   }
   return blocks;
@@ -118,12 +175,27 @@ function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
 
   // Calles de pre-carga: bordes amarillos de seguridad y flecha de sentido hacia la puerta.
   for (const dock of layout.docks) {
-    const half = Math.min(LANE_DRAW_WIDTH, dock.laneRect.xMax - dock.laneRect.xMin) / 2;
-    const z0 = dock.laneRect.zMin;
-    const z1 = dock.laneRect.zMax;
-    paintLine(group, dock.x - half, z0, dock.x - half, z1, SAFETY_YELLOW, 0.14);
-    paintLine(group, dock.x + half, z0, dock.x + half, z1, SAFETY_YELLOW, 0.14);
-    paintArrow(group, dock.x, z0 + 6, 1, PAINT_WHITE, 0.9);
+    const lr = dock.laneRect;
+    const across = dock.face === 'south' ? lr.xMax - lr.xMin : lr.zMax - lr.zMin;
+    const half = Math.min(LANE_DRAW_WIDTH, across) / 2;
+    const u = dockU(dock);
+    const [v0, v1] = dock.face === 'south' ? [lr.zMin, lr.zMax] : [lr.xMin, lr.xMax];
+    for (const side of [u - half, u + half]) {
+      const a = faceXZ(dock.face, side, v0);
+      const b = faceXZ(dock.face, side, v1);
+      paintLine(group, a.x, a.z, b.x, b.z, SAFETY_YELLOW, 0.14);
+    }
+    const arrow = faceXZ(dock.face, u, v0 + 6);
+    if (dock.face === 'south') {
+      paintArrow(group, arrow.x, arrow.z, 1, PAINT_WHITE, 0.9);
+    } else {
+      // Batería este: la flecha se gira de +Z a +X, hacia la puerta.
+      const g = new THREE.Group();
+      paintArrow(g, 0, 0, 1, PAINT_WHITE, 0.9);
+      g.position.set(arrow.x, 0, arrow.z);
+      g.rotation.y = Math.PI / 2;
+      group.add(g);
+    }
   }
 
   // Pasillos transversales: bordes amarillos en sus dos lados largos.
@@ -147,106 +219,58 @@ function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
   return group;
 }
 
-function verticalSegments(_width: number, from: number, to: number, wallFull: number, mat: THREE.Material, holes: { xMin: number; xMax: number }[]): WallMesh[] {
-  const walls: WallMesh[] = [];
-  for (const seg of segmentsWithHoles(from, to, holes)) {
-    const cx = (seg.xMin + seg.xMax) / 2;
-    const w = seg.xMax - seg.xMin;
-    const mesh = box(w, 1, WALL_THICKNESS, mat, cx, wallFull / 2, 0);
-    walls.push({ mesh, fullTop: wallFull, normal: { x: 0, z: 1 } });
-  }
-  return walls;
-}
-
-function horizontalSegments(_depth: number, from: number, to: number, wallFull: number, mat: THREE.Material, holes: { xMin: number; xMax: number }[]): WallMesh[] {
-  const walls: WallMesh[] = [];
-  for (const seg of segmentsWithHoles(from, to, holes)) {
-    const cz = (seg.xMin + seg.xMax) / 2;
-    const d = seg.xMax - seg.xMin;
-    const mesh = box(WALL_THICKNESS, 1, d, mat, 0, wallFull / 2, cz);
-    walls.push({ mesh, fullTop: wallFull, normal: { x: 1, z: 0 } });
-  }
-  return walls;
-}
-
 function buildOuterWalls(layout: WarehouseLayout): WallMesh[] {
   const { rect, freeHeight } = layout.building;
   const mat = lambert(0xdfe6ee);
   const matSouth = lambert(0xd5dce7);
-  const walls: WallMesh[] = [];
 
-  // Fachada sur con los huecos de los muelles (la base de cada hueco la tapa el andén).
-  const dockHoles = layout.docks.map((d) => ({ xMin: d.x - d.doorWidth / 2, xMax: d.x + d.doorWidth / 2 }));
-  const south = horizontalSegments(WALL_THICKNESS, rect.xMin, rect.xMax, freeHeight, matSouth, dockHoles);
-  for (const w of south) {
-    w.normal = { x: 0, z: 1 };
-    w.mesh.position.z = rect.zMax;
-  }
-  walls.push(...south);
+  // Huecos de las puertas: en la fachada sur (x) y en la este (z).
+  const southHoles = layout.docks
+    .filter((d) => d.face === 'south')
+    .map((d) => ({ xMin: d.x - d.doorWidth / 2, xMax: d.x + d.doorWidth / 2 }));
+  const eastHoles = layout.docks
+    .filter((d) => d.face === 'east')
+    .map((d) => ({ xMin: d.z - d.doorWidth / 2, xMax: d.z + d.doorWidth / 2 }));
 
-  const north = horizontalSegments(WALL_THICKNESS, rect.xMin, rect.xMax, freeHeight, mat, []);
-  for (const w of north) {
-    w.normal = { x: 0, z: -1 };
-    w.mesh.position.z = rect.zMin;
-  }
-  walls.push(...north);
-
-  const west = verticalSegments(WALL_THICKNESS, rect.zMin, rect.zMax, freeHeight, mat, []);
-  for (const w of west) {
-    w.normal = { x: -1, z: 0 };
-    w.mesh.position.x = rect.xMin;
-  }
-  walls.push(...west);
-
-  const east = verticalSegments(WALL_THICKNESS, rect.zMin, rect.zMax, freeHeight, mat, []);
-  for (const w of east) {
-    w.normal = { x: 1, z: 0 };
-    w.mesh.position.x = rect.xMax;
-  }
-  walls.push(...east);
-
-  return walls;
+  return [
+    ...wallAlongX(rect.xMin, rect.xMax, rect.zMax, freeHeight, matSouth, southHoles, 1),
+    ...wallAlongX(rect.xMin, rect.xMax, rect.zMin, freeHeight, mat, [], -1),
+    ...wallAlongZ(rect.zMin, rect.zMax, rect.xMin, freeHeight, mat, [], -1),
+    ...wallAlongZ(rect.zMin, rect.zMax, rect.xMax, freeHeight, mat, eastHoles, 1),
+  ];
 }
 
 function buildInnerWalls(layout: WarehouseLayout): WallMesh[] {
-  const walls: WallMesh[] = [];
   const cameraPanels = lambert(0xc9d4e6);
+  const southHoles = layout.docks
+    .filter((d) => d.face === 'south')
+    .map((d) => ({ xMin: d.x - 1.5, xMax: d.x + 1.5 }));
 
-  // Tabique x=30 (seco | frío / fyV), con puertas hacia fyV y Expedición.
-  const w1 = verticalSegments(WALL_THICKNESS, -80, 50, 9.5, cameraPanels, [
-    { xMin: -32.5, xMax: -18 },
-    { xMin: 45, xMax: 50 },
-  ]);
-  for (const w of w1) w.mesh.position.x = 30;
-  walls.push(...w1);
-
-  // Límite sur de Frío / norte de fyV y Congelado: z=−25.
-  const w2 = horizontalSegments(WALL_THICKNESS, 30, 125, 9.5, cameraPanels, [
-    { xMin: 30, xMax: 36 },
-    { xMin: 66, xMax: 72 },
-  ]);
-  for (const w of w2) w.mesh.position.z = -25;
-  walls.push(...w2);
-
-  // Tabique x=70 (fyV | congelado), con puerta y salida.
-  const w3 = verticalSegments(WALL_THICKNESS, -25, 50, 9.5, cameraPanels, [
-    { xMin: 0, xMax: 5 },
-    { xMin: 47, xMax: 50 },
-  ]);
-  for (const w of w3) w.mesh.position.x = 70;
-  walls.push(...w3);
-
-  // Banda baja z=50 hacia Expedición: pasillos que atraviesan las máquinas.
-  const w4 = horizontalSegments(WALL_THICKNESS, -125, 125, 3.0, cameraPanels, layout.docks.map((d) => ({ xMin: d.x - 1.5, xMax: d.x + 1.5 })));
-  for (const w of w4) w.mesh.position.z = 50;
-  walls.push(...w4);
-
-  return walls;
+  return [
+    // Tabique x=30 (seco | frío / fyV), con puertas hacia fyV y Expedición.
+    ...wallAlongZ(-80, 50, 30, 9.5, cameraPanels, [
+      { xMin: -32.5, xMax: -18 },
+      { xMin: 45, xMax: 50 },
+    ], 1),
+    // Límite sur de Frío / norte de fyV y Congelado: z=−25, hasta el pasillo de servicio este.
+    ...wallAlongX(30, EAST_CORRIDOR_OPEN.xMin, -25, 9.5, cameraPanels, [
+      { xMin: 30, xMax: 36 },
+      { xMin: 66, xMax: 72 },
+    ], 1),
+    // Tabique x=70 (fyV | congelado), con puerta y salida.
+    ...wallAlongZ(-25, 50, 70, 9.5, cameraPanels, [
+      { xMin: 0, xMax: 5 },
+      { xMin: 47, xMax: 50 },
+    ], 1),
+    // Banda baja z=50 hacia Expedición: pasillos que atraviesan las máquinas y el de servicio este.
+    ...wallAlongX(-125, 125, 50, 3.0, cameraPanels, [...southHoles, EAST_CORRIDOR_OPEN], 1),
+  ];
 }
 
 /**
  * Muelles sobre el piso único de la nave (1,2 m): zócalo bajo la nave, niveladora a ras de piso, marquesinas,
- * escaleras peatonales en el extremo de cada bloque de muelles y antesala de frío en las zonas refrigeradas.
+ * escaleras peatonales en el extremo de cada bloque y antesala de frío en los bloques refrigerados.
+ * Cada muelle se dibuja en su cara (sur o este) con la misma geometría, rotada.
  */
 function buildDockFurniture(layout: WarehouseLayout): THREE.Group {
   const group = new THREE.Group();
@@ -265,62 +289,61 @@ function buildDockFurniture(layout: WarehouseLayout): THREE.Group {
   group.add(plinth);
 
   for (const block of dockBlocks(layout.docks)) {
-    // Escalera peatonal a la izquierda del bloque: sube desde el patio hasta el piso de la nave.
-    const sx = dockStairX(block);
+    const face = block.face;
+    const fv = FACE_V[face];
+    // Escalera peatonal junto al bloque: sube desde el patio hasta el piso de la nave.
+    const su = dockStairX(block);
     // Tres huellas intermedias: la primera a H-0,3 m y la última a 0,3 m; la última contrahuella llega al patio.
     for (let k = 0; k < STAIR_RISERS - 1; k++) {
       const top = H - (k + 1) * STAIR_RISE;
-      const zc = DOCK_FACE_Z + 0.2 + (k + 0.5) * STAIR_TREAD;
-      group.add(box(1.4, top, STAIR_TREAD, stepMat, sx, top / 2, zc));
+      const vc = fv + 0.2 + (k + 0.5) * STAIR_TREAD;
+      group.add(boxUV(face, su - 0.7, su + 0.7, vc - STAIR_TREAD / 2, vc + STAIR_TREAD / 2, 0, top, stepMat));
     }
     // Antesala de frío: volumen translúcido junto a los muelles, con franja de temperatura en el suelo.
     if (block.temp !== 'dry') {
-      const w = block.xMax - block.xMin + 3.8;
-      const cxBlock = (block.xMin + block.xMax) / 2;
       const tint = block.temp === 'frozen' ? 0x9fd8ff : 0x7cc4f0;
-      const zMin = 74;
-      const zMax = DOCK_FACE_Z - 0.2;
-      const cz = (zMin + zMax) / 2;
+      const vIn = fv - 6;
+      const vOut = fv - 0.2;
+      const r = rectUV(face, block.uMin - 1.9, block.uMax + 1.9, vIn, vOut);
       const vol = new THREE.Mesh(
-        new THREE.BoxGeometry(w, 3.2, zMax - zMin),
+        new THREE.BoxGeometry(r.w, 3.2, r.d),
         new THREE.MeshLambertMaterial({ color: tint, transparent: true, opacity: 0.16, depthWrite: false }),
       );
-      vol.position.set(cxBlock, H + 1.6, cz);
+      vol.position.set(r.cx, H + 1.6, r.cz);
       vol.name = `antesala-${block.temp}`;
       group.add(vol);
-      group.add(paintFill(w, 0.5, tint, cxBlock, zMin + 0.4, H + 0.04));
-      group.add(paintFill(w, 0.25, tint, cxBlock, zMax - 0.2, H + 0.04));
+      group.add(planeUV(face, block.uMin - 1.9, block.uMax + 1.9, vIn + 0.15, vIn + 0.65, tint, H + 0.04));
+      group.add(planeUV(face, block.uMin - 1.9, block.uMax + 1.9, vOut - 0.5, vOut - 0.25, tint, H + 0.04));
       const panelMat = lambert(0x6fa8d6, { transparent: true, opacity: 0.6 });
-      group.add(box(0.15, 3.2, zMax - zMin, panelMat, block.xMin - 1.9, H + 1.6, cz));
-      group.add(box(0.15, 3.2, zMax - zMin, panelMat, block.xMax + 1.9, H + 1.6, cz));
+      group.add(boxUV(face, block.uMin - 1.9 - 0.075, block.uMin - 1.9 + 0.075, vIn, vOut, H, H + 3.2, panelMat));
+      group.add(boxUV(face, block.uMax + 1.9 - 0.075, block.uMax + 1.9 + 0.075, vIn, vOut, H, H + 3.2, panelMat));
     }
   }
 
   for (const dock of layout.docks) {
-    const cx = dock.x;
+    const face = dock.face;
+    const u = dockU(dock);
+    const fv = FACE_V[face];
     // Niveladora: placa a ras de piso desde la fachada hasta la trasera del remolque, con dos apoyos.
     const plateD = DOCK_EDGE_Z - DOCK_FACE_Z + 0.2;
-    group.add(box(dock.doorWidth, 0.05, plateD, levelerMat, cx, H - 0.025, DOCK_FACE_Z - 0.2 + plateD / 2));
+    group.add(boxUV(face, u - dock.doorWidth / 2, u + dock.doorWidth / 2, fv - 0.2, fv - 0.2 + plateD, H - 0.05, H, levelerMat));
     for (const sx of [-1, 1]) {
-      group.add(box(0.25, H - 0.05, 0.25, frameMat, cx + (sx * dock.doorWidth) / 2 - sx * 0.2, (H - 0.05) / 2, DOCK_FACE_Z + 1.2));
+      const uc = u + (sx * dock.doorWidth) / 2 - sx * 0.2;
+      group.add(boxUV(face, uc - 0.125, uc + 0.125, fv + 1.075, fv + 1.325, 0, H - 0.05, frameMat));
     }
 
     // Marquesina a 4,3 m con dos pilares fuera del ancho del remolque (2,55 m).
-    group.add(box(3.2, 0.25, 2.0, shelterMat, cx, 4.45, 81.2));
-    group.add(box(0.18, 3.1, 0.18, shelterMat, cx - 1.5, H + 1.55, 82.1));
-    group.add(box(0.18, 3.1, 0.18, shelterMat, cx + 1.5, H + 1.55, 82.1));
+    group.add(boxUV(face, u - 1.6, u + 1.6, fv + 0.2, fv + 2.2, 4.325, 4.575, shelterMat));
+    group.add(boxUV(face, u - 1.5 - 0.09, u - 1.5 + 0.09, fv + 2.01, fv + 2.19, H, H + 3.1, shelterMat));
+    group.add(boxUV(face, u + 1.5 - 0.09, u + 1.5 + 0.09, fv + 2.01, fv + 2.19, H, H + 3.1, shelterMat));
 
     // Marco de la puerta.
-    group.add(box(3.0, 0.2, 0.2, frameMat, cx, H + 1.4, 80.1));
-    group.add(box(0.2, 2.6, 0.2, frameMat, cx - 1.5, H + 1.3, 80.1));
-    group.add(box(0.2, 2.6, 0.2, frameMat, cx + 1.5, H + 1.3, 80.1));
+    group.add(boxUV(face, u - 1.5, u + 1.5, fv, fv + 0.2, H + 1.3, H + 1.5, frameMat));
+    group.add(boxUV(face, u - 1.5 - 0.1, u - 1.5 + 0.1, fv, fv + 0.2, H, H + 2.6, frameMat));
+    group.add(boxUV(face, u + 1.5 - 0.1, u + 1.5 + 0.1, fv, fv + 0.2, H, H + 2.6, frameMat));
   }
 
   return group;
-}
-
-function buildOuterAndInner(layout: WarehouseLayout) {
-  return { outer: buildOuterWalls(layout), inner: buildInnerWalls(layout) };
 }
 
 export function buildBuilding(layout: WarehouseLayout): BuildingModel {
@@ -330,7 +353,8 @@ export function buildBuilding(layout: WarehouseLayout): BuildingModel {
   nave.name = 'nave';
   nave.position.y = NAVE_FLOOR_H;
   nave.add(buildZoneFloors(layout));
-  const { outer: outerWalls, inner: innerWalls } = buildOuterAndInner(layout);
+  const outerWalls = buildOuterWalls(layout);
+  const innerWalls = buildInnerWalls(layout);
 
   for (const w of outerWalls) nave.add(w.mesh);
   for (const w of innerWalls) nave.add(w.mesh);

@@ -4,6 +4,7 @@ import {
   locationId,
   type Aisle,
   type Dock,
+  type DockFace,
   type Graph,
   type GraphEdge,
   type GraphNode,
@@ -18,7 +19,7 @@ import {
   type WarehouseLayout,
   type ZoneInfo,
 } from '@/lib/layout/types';
-
+import { DOOR_HALF, EAST_CORRIDOR_X, FACE_V, INTERIOR_DEPTH, LANE_DEPTH, dockPoint, faceXZ } from '@/lib/layout/dock-geometry';
 // --- Cifras de partida (metros, ajustables) ---
 const PARCEL: Rect = { xMin: -210, xMax: 210, zMin: -150, zMax: 185 };
 const ROAD_WIDTH = 8;
@@ -53,36 +54,53 @@ interface RackZoneSpec {
   storageBegin: number;
   storageEnd: number;
   levels: number;
-  segments: { zStart: number; zEnd: number }[];
+  /** Tramo de z (m) con estanterías; los pasillos transversales lo parten. */
+  zRange: [number, number];
 }
 
+/** Final este de las estanterías frío y congelado: deja libre el pasillo de servicio de los muelles este. */
+const COLD_RACK_END = 106;
+
 const RACK_ZONES: RackZoneSpec[] = [
-  {
-    zoneId: 'seco',
-    storageBegin: -105,
-    storageEnd: 30,
-    levels: RACK_LEVELS,
-    segments: [
-      { zStart: -76, zEnd: -36 },
-      { zStart: -32, zEnd: 4 },
-      { zStart: 8, zEnd: 44 },
-    ],
-  },
-  {
-    zoneId: 'frio',
-    storageBegin: 30,
-    storageEnd: 125,
-    levels: RACK_LEVELS,
-    segments: [{ zStart: -76, zEnd: -29 }],
-  },
-  {
-    zoneId: 'congelado',
-    storageBegin: 70,
-    storageEnd: 125,
-    levels: RACK_LEVELS,
-    segments: [{ zStart: -21, zEnd: 46 }],
-  },
+  { zoneId: 'seco', storageBegin: -105, storageEnd: 30, levels: RACK_LEVELS, zRange: [-76, 44] },
+  { zoneId: 'frio', storageBegin: 30, storageEnd: COLD_RACK_END, levels: RACK_LEVELS, zRange: [-76, -29] },
+  { zoneId: 'congelado', storageBegin: 70, storageEnd: COLD_RACK_END, levels: RACK_LEVELS, zRange: [-21, 46] },
 ];
+
+/** Pasillos transversales de 4 m (z), iguales en todas las zonas: cruzan la nave a la misma altura. */
+const CROSS_BANDS: [number, number][] = [
+  [-36, -32],
+  [4, 8],
+];
+
+/**
+ * Tramos de estantería de una zona: se parten en los pasillos transversales y los módulos de 2,7 m
+ * se anclan al pasillo (el sobrante queda en el extremo de la zona).
+ */
+function rackSegments(zRange: [number, number]): { zStart: number; zEnd: number; firstModule: number; moduleCount: number }[] {
+  const [z0, z1] = zRange;
+  const pieces: { a: number; b: number; anchorB: boolean }[] = [];
+  let start = z0;
+  for (const [a, b] of CROSS_BANDS) {
+    if (a < z0 || b > z1) continue;
+    pieces.push({ a: start, b: a, anchorB: true });
+    start = b;
+  }
+  pieces.push({ a: start, b: z1, anchorB: false });
+
+  const segments: { zStart: number; zEnd: number; firstModule: number; moduleCount: number }[] = [];
+  let firstModule = 1;
+  for (const p of pieces) {
+    const count = Math.floor((p.b - p.a) / MODULE);
+    if (count < 1) continue;
+    const len = count * MODULE;
+    const zStart = p.anchorB ? p.b - len : p.a;
+    segments.push({ zStart, zEnd: zStart + len, firstModule, moduleCount: count });
+    firstModule += count;
+  }
+  return segments;
+}
+
 
 /** Flejadora en el pasillo central, entre el almacén de picking y las calles de muelle. */
 const STRAPPERS: Strapper[] = [
@@ -124,12 +142,13 @@ function buildRooms(): WarehouseRoom[] {
 }
 
 function zones(): ZoneInfo[] {
+  const segs = (rz: RackZoneSpec) => rackSegments(rz.zRange);
   return [
-    { id: 'seco', label: 'Seco', color: '#c9ced6', temp: '16–22 ºC', rect: { xMin: -125, xMax: 30, zMin: -80, zMax: 50 }, storage: 'rack', levels: RACK_LEVELS, rackSegments: RACK_ZONES[0].segments },
+    { id: 'seco', label: 'Seco', color: '#c9ced6', temp: '16–22 ºC', rect: { xMin: -125, xMax: 30, zMin: -80, zMax: 50 }, storage: 'rack', levels: RACK_LEVELS, rackSegments: segs(RACK_ZONES[0]) },
     { id: 'carga_baterias', label: 'Sala de carga', color: '#9aa3b5', temp: '—', rect: { xMin: -125, xMax: -105, zMin: -80, zMax: -62 }, storage: 'none' },
-    { id: 'frio', label: 'Frío', color: '#7cc4f0', temp: '+2/+4 ºC', rect: { xMin: 30, xMax: 125, zMin: -80, zMax: -25 }, storage: 'rack', levels: RACK_LEVELS, rackSegments: RACK_ZONES[1].segments },
+    { id: 'frio', label: 'Frío', color: '#7cc4f0', temp: '+2/+4 ºC', rect: { xMin: 30, xMax: COLD_RACK_END, zMin: -80, zMax: -25 }, storage: 'rack', levels: RACK_LEVELS, rackSegments: segs(RACK_ZONES[1]) },
     { id: 'fyv', label: 'Frutas y verduras', color: '#8fd694', temp: '+6 ºC · 85–90 % HR', rect: { xMin: 30, xMax: 70, zMin: -25, zMax: 50 }, storage: 'floor' },
-    { id: 'congelado', label: 'Congelado', color: '#b9e3ff', temp: '−22/−25 ºC', rect: { xMin: 70, xMax: 125, zMin: -25, zMax: 50 }, storage: 'rack', levels: RACK_LEVELS, rackSegments: RACK_ZONES[2].segments },
+    { id: 'congelado', label: 'Congelado', color: '#b9e3ff', temp: '−22/−25 ºC', rect: { xMin: 70, xMax: COLD_RACK_END, zMin: -25, zMax: 50 }, storage: 'rack', levels: RACK_LEVELS, rackSegments: segs(RACK_ZONES[2]) },
     { id: 'expedicion', label: 'Expedición', color: '#f5d06b', temp: 'según muelle', rect: { xMin: -125, xMax: 125, zMin: 50, zMax: 80 }, storage: 'staging' },
   ];
 }
@@ -143,7 +162,7 @@ function buildRackLines(): { aisles: Aisle[]; rackLines: RackLine[]; crossAisles
     const symbol = ZONE_SYMBOLS[rz.zoneId];
     const span = rz.storageEnd - rz.storageBegin;
     const aisleCount = Math.floor(span / PITCH);
-    // Espacio sobrante al este del último pasillo.
+    const segments = rackSegments(rz.zRange);
     for (let i = 0; i < aisleCount; i++) {
       const xStart = rz.storageBegin + i * PITCH;
       const aisleNum = i + 1;
@@ -153,14 +172,6 @@ function buildRackLines(): { aisles: Aisle[]; rackLines: RackLine[]; crossAisles
       const rackACenter = xStart + RACK_DEPTH + AISLE_WIDTH + RACK_DEPTH / 2;
 
       aisles.push({ id: aisleId, zoneId: rz.zoneId, xCenter: aisleCenter });
-
-      let firstModule = 1;
-      const segments = rz.segments.map((seg) => {
-        const count = Math.floor((seg.zEnd - seg.zStart) / MODULE);
-        const first = firstModule;
-        firstModule += count;
-        return { zStart: seg.zStart, zEnd: seg.zStart + count * MODULE, firstModule: first, moduleCount: count };
-      });
 
       for (const side of ['B', 'A'] as const) {
         rackLines.push({
@@ -176,12 +187,10 @@ function buildRackLines(): { aisles: Aisle[]; rackLines: RackLine[]; crossAisles
       }
     }
 
-    // Pasillos transversales de 4 m entre segmentos de la zona.
-    for (let s = 0; s < rz.segments.length - 1; s++) {
-      const gapStart = rz.segments[s].zEnd;
-      const gapEnd = rz.segments[s + 1].zStart;
-      if (gapEnd - gapStart >= 3) {
-        crossAisles.push({ xMin: rz.storageBegin, xMax: rz.storageEnd, zMin: gapStart, zMax: gapEnd });
+    // Pasillos transversales de 4 m, a la misma altura en todas las zonas que cruzan.
+    for (const [a, b] of CROSS_BANDS) {
+      if (a >= rz.zRange[0] && b <= rz.zRange[1]) {
+        crossAisles.push({ xMin: rz.storageBegin, xMax: rz.storageEnd, zMin: a, zMax: b });
       }
     }
   }
@@ -190,42 +199,45 @@ function buildRackLines(): { aisles: Aisle[]; rackLines: RackLine[]; crossAisles
 }
 
 /**
- * Muelles agrupados en bloques por temperatura (seco, frío, congelado) con un hueco de maniobra
- * entre bloques, en lugar de una fila continua. Cada bloque tiene su propia plataforma y marquesinas.
+ * Muelles en L (60 en total). Tramo sur: 36 secos en 3 bloques de 12 a lo largo de la fachada (z = 80).
+ * Tramo este: 24 de frío y congelado en la fachada x = 125, de sur a norte (frío 36-45, congelado 46-59).
+ * Los índices y las temperaturas no cambian; solo la geometría.
  */
-const DOCK_BLOCKS: { temp: Dock['temp']; count: number }[] = [
-  { temp: 'dry', count: 12 },
-  { temp: 'dry', count: 12 },
-  { temp: 'dry', count: 12 },
-  { temp: 'cool', count: 10 },
-  { temp: 'frozen', count: 7 },
-  { temp: 'frozen', count: 7 },
-];
-const DOCK_SPACING = 3.5;
+const DOCK_PITCH = 3.5;
 const DOCK_BLOCK_GAP = 6;
+const SOUTH_BLOCK_PITCH = 12 * DOCK_PITCH + DOCK_BLOCK_GAP;
+const SOUTH_FIRST_U = -26.5;
+const EAST_COOL_FIRST_Z = 72;
+const EAST_FROZEN_FIRST_Z = 31;
 
 function buildDocks(): Dock[] {
   const docks: Dock[] = [];
-  let blockX = -120;
-  let i = 0;
-  for (const block of DOCK_BLOCKS) {
-    for (let k = 0; k < block.count; k++) {
-      const x = blockX + (k + 0.5) * DOCK_SPACING;
-      const kind: Dock['kind'] = i < 14 ? 'inbound' : 'outbound';
-      docks.push({
-        id: `D${String(i + 1).padStart(2, '0')}`,
-        index: i,
-        x,
-        kind,
-        temp: block.temp,
-        doorWidth: 3,
-        levelerDepth: 2.5,
-        laneRect: { xMin: x - 1.5, xMax: x + 1.5, zMin: 54, zMax: 76 },
-      });
-      i++;
-    }
-    blockX += block.count * DOCK_SPACING + DOCK_BLOCK_GAP;
+  const add = (face: DockFace, temp: Dock['temp'], u: number) => {
+    const i = docks.length;
+    const c = faceXZ(face, u, FACE_V[face]);
+    // Calle de pre-carga: tramo sur entre el spine y la fachada; batería este entre el pasillo de servicio y la puerta.
+    const laneRect: Rect =
+      face === 'south'
+        ? { xMin: u - DOOR_HALF, xMax: u + DOOR_HALF, zMin: 54, zMax: 76 }
+        : { xMin: 113, xMax: 124, zMin: u - DOOR_HALF, zMax: u + DOOR_HALF };
+    docks.push({
+      id: `D${String(i + 1).padStart(2, '0')}`,
+      index: i,
+      face,
+      x: c.x,
+      z: c.z,
+      kind: i < 14 ? 'inbound' : 'outbound',
+      temp,
+      doorWidth: 3,
+      levelerDepth: 2.5,
+      laneRect,
+    });
+  };
+  for (let b = 0; b < 3; b++) {
+    for (let j = 0; j < 12; j++) add('south', 'dry', SOUTH_FIRST_U + b * SOUTH_BLOCK_PITCH + j * DOCK_PITCH);
   }
+  for (let j = 0; j < 10; j++) add('east', 'cool', EAST_COOL_FIRST_Z - j * DOCK_PITCH);
+  for (let k = 0; k < 14; k++) add('east', 'frozen', EAST_FROZEN_FIRST_Z - k * DOCK_PITCH);
   return docks;
 }
 
@@ -402,7 +414,9 @@ function buildIndoorGraph(rackLines: RackLine[], crossAisles: Rect[], docks: Doc
   const spineZ = 47;
   const spineXs = new Set<number>();
   for (const a of aisleXZ) spineXs.add(a.x);
-  for (const dk of docks) spineXs.add(dk.x);
+  for (const dk of docks) if (dk.face === 'south') spineXs.add(dk.x);
+  // Columna del pasillo de servicio este: su nodo de spine une las calles en batería con Expedición.
+  spineXs.add(EAST_CORRIDOR_X);
   const sortedXs = [...spineXs].sort((a, b) => a - b);
   for (let i = 0; i < sortedXs.length - 1; i++) {
     const a = spineNode(sortedXs[i]);
@@ -411,26 +425,43 @@ function buildIndoorGraph(rackLines: RackLine[], crossAisles: Rect[], docks: Doc
     addNode(b, sortedXs[i + 1], spineZ);
     addEdge(a, b);
   }
-  // Cada pasillo y cada muelle engancha al spine de su columna (si el tramo queda libre).
+  // Cada pasillo engancha al spine de su columna (si el tramo queda libre).
   for (const a of aisleXZ) {
     addEdge(`aisle-${a.aisleId}-S`, spineNode(a.x));
   }
 
-  // Muelles: cada lane se conecta al spine y al frente del muelle.
-  for (const dk of docks) {
-    addNode(`lane-${dk.id}`, dk.x, 60);
-    addNode(`dock-${dk.id}`, dk.x, 78);
+  // Tramo sur: cada calle de muelle engancha al spine de su columna y al frente del muelle.
+  const southDocks = docks.filter((d) => d.face === 'south');
+  for (const dk of southDocks) {
+    const lane = dockPoint(dk, 0, LANE_DEPTH.south.node);
+    const front = dockPoint(dk, 0, INTERIOR_DEPTH);
+    addNode(`lane-${dk.id}`, lane.x, lane.z);
+    addNode(`dock-${dk.id}`, front.x, front.z);
     addEdge(`lane-${dk.id}`, `dock-${dk.id}`);
     addEdge(spineNode(dk.x), `lane-${dk.id}`);
   }
-  // Conexión horizontal de los lanes entre sí.
-  const laneXs = docks.map((d) => d.x).sort((a, b) => a - b);
-  for (let i = 0; i < laneXs.length - 1; i++) {
-    const a = `c-lane-${laneXs[i]}`;
-    const b = `c-lane-${laneXs[i + 1]}`;
-    addNode(a, laneXs[i], 60);
-    addNode(b, laneXs[i + 1], 60);
-    addEdge(a, b);
+  // Las calles del tramo sur se enlazan entre sí por su fondo.
+  const southLanes = [...southDocks].sort((a, b) => a.x - b.x);
+  for (let i = 0; i < southLanes.length - 1; i++) {
+    addEdge(`lane-${southLanes[i].id}`, `lane-${southLanes[i + 1].id}`);
+  }
+
+  // Tramo este: cada calle en batería llega al pasillo de servicio (x = 110), que se enlaza por z con el spine.
+  const eastStops: { id: string; z: number }[] = [{ id: spineNode(EAST_CORRIDOR_X), z: spineZ }];
+  for (const dk of docks.filter((d) => d.face === 'east')) {
+    const lane = dockPoint(dk, 0, LANE_DEPTH.east.node);
+    const front = dockPoint(dk, 0, INTERIOR_DEPTH);
+    const corr = `ce-${dk.id}`;
+    addNode(corr, EAST_CORRIDOR_X, dk.z);
+    addNode(`lane-${dk.id}`, lane.x, lane.z);
+    addNode(`dock-${dk.id}`, front.x, front.z);
+    addEdge(corr, `lane-${dk.id}`);
+    addEdge(`lane-${dk.id}`, `dock-${dk.id}`);
+    eastStops.push({ id: corr, z: dk.z });
+  }
+  eastStops.sort((p, q) => p.z - q.z);
+  for (let i = 0; i < eastStops.length - 1; i++) {
+    addEdge(eastStops[i].id, eastStops[i + 1].id);
   }
 
   return { nodes, edges };
@@ -459,8 +490,10 @@ function buildYardGraph(docks: Dock[]): Graph {
   ];
 
   for (const dk of docks) {
-    nodes.push({ id: `ydock-${dk.id}`, x: dk.x, z: 95 });
-    const anchor = dk.x < -40 ? 'yard-w' : dk.x > 40 ? 'yard-e' : 'yard-c';
+    // Tramo sur: la maniobra llega desde el patio (z = 95). Tramo este: desde el patio del este (x = 133).
+    const p = dk.face === 'south' ? { x: dk.x, z: 95 } : { x: 133, z: dk.z };
+    nodes.push({ id: `ydock-${dk.id}`, x: p.x, z: p.z });
+    const anchor = dk.face === 'east' ? 'yard-e' : dk.x < -40 ? 'yard-w' : dk.x > 40 ? 'yard-e' : 'yard-c';
     edges.push({ from: `ydock-${dk.id}`, to: anchor });
   }
 

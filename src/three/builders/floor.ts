@@ -106,23 +106,23 @@ export function paintFill(w: number, d: number, color: number, x: number, z: num
 }
 
 /** Línea de pintura (banda) de grosor `t` a lo largo de un eje. */
-export function paintLine(group: THREE.Group, x0: number, z0: number, x1: number, z1: number, color: number, t = 0.15) {
+export function paintLine(group: THREE.Group, x0: number, z0: number, x1: number, z1: number, color: number, t = 0.15, y = MARK_Y) {
   const dx = x1 - x0;
   const dz = z1 - z0;
   const len = Math.hypot(dx, dz);
   if (len < 1e-6) return;
-  const mesh = paintFill(len, t, color, (x0 + x1) / 2, (z0 + z1) / 2);
+  const mesh = paintFill(len, t, color, (x0 + x1) / 2, (z0 + z1) / 2, y);
   // El plano se crea horizontal con su largo en X; con Euler XYZ (Rx·Rz) un giro −φ en Z da la dirección (cos φ, −sin(−φ)) = (dx, dz)/len.
   mesh.rotation.z = -Math.atan2(dz, dx);
   group.add(mesh);
 }
 
 /** Contorno rectangular de pintura (cuatro bandas) alrededor de un rectángulo. */
-export function paintOutline(group: THREE.Group, xMin: number, xMax: number, zMin: number, zMax: number, color: number, t = 0.15) {
-  paintLine(group, xMin, zMin, xMax, zMin, color, t);
-  paintLine(group, xMax, zMin, xMax, zMax, color, t);
-  paintLine(group, xMax, zMax, xMin, zMax, color, t);
-  paintLine(group, xMin, zMax, xMin, zMin, color, t);
+export function paintOutline(group: THREE.Group, xMin: number, xMax: number, zMin: number, zMax: number, color: number, t = 0.15, y = MARK_Y) {
+  paintLine(group, xMin, zMin, xMax, zMin, color, t, y);
+  paintLine(group, xMax, zMin, xMax, zMax, color, t, y);
+  paintLine(group, xMax, zMax, xMin, zMax, color, t, y);
+  paintLine(group, xMin, zMax, xMin, zMin, color, t, y);
 }
 
 /** Flecha de sentido de circulación sobre el suelo (cuerpo + punta), mirando a +Z o −Z. */

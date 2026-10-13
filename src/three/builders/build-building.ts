@@ -28,6 +28,10 @@ export interface BuildingModel {
 }
 
 const WALL_THICKNESS = 0.4;
+/** Pasillos transversales: franja clara bajo sus bordes amarillos; contorno de cada zona de estantería. */
+const CROSS_AISLE_TONE = 0xb4bcc6;
+const CROSS_AISLE_Y = 0.024;
+const ZONE_LINE_Y = 0.026;
 /** Ancho dibujado de cada calle de pre-carga (los muelles están cada 3,5 m dentro de cada bloque). */
 const LANE_DRAW_WIDTH = 2.2;
 
@@ -143,6 +147,17 @@ function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
     floor.userData.zoneId = zone.id;
     floor.userData.zone = zone;
     group.add(floor);
+  }
+
+  // Zonas de estantería: contorno de su color para separarlas a simple vista.
+  for (const zone of layout.zones) {
+    if (zone.storage !== 'rack') continue;
+    const r = zone.rect;
+    paintOutline(group, r.xMin + 0.25, r.xMax - 0.25, r.zMin + 0.25, r.zMax - 0.25, parseInt(zone.color.slice(1), 16), 0.5, ZONE_LINE_Y);
+  }
+  // Pasillos transversales: franja más clara entre sus bordes amarillos.
+  for (const ca of layout.crossAisles) {
+    group.add(paintFill(ca.xMax - ca.xMin, ca.zMax - ca.zMin, CROSS_AISLE_TONE, (ca.xMin + ca.xMax) / 2, (ca.zMin + ca.zMax) / 2, CROSS_AISLE_Y));
   }
 
   // Salas de carga y de reposo: contorno y plazas pintadas sobre el hormigón.

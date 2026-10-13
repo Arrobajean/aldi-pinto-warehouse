@@ -19,6 +19,8 @@ export interface WallMesh {
   fullTop: number;
   /** Normal exterior del muro (0,0,±1 o ±1,0,0). */
   normal: { x: number; z: number };
+  /** true si es cerramiento exterior; false para tabiques interiores. */
+  outer: boolean;
 }
 
 export interface BuildingModel {
@@ -77,6 +79,7 @@ function wallAlongX(x0: number, x1: number, z: number, height: number, mat: THRE
     mesh: box(seg.xMax - seg.xMin, height, WALL_THICKNESS, mat, (seg.xMin + seg.xMax) / 2, height / 2, z),
     fullTop: height,
     normal: { x: 0, z: normalZ },
+    outer: false,
   }));
 }
 
@@ -86,6 +89,7 @@ function wallAlongZ(z0: number, z1: number, x: number, height: number, mat: THRE
     mesh: box(WALL_THICKNESS, height, seg.xMax - seg.xMin, mat, x, height / 2, (seg.xMin + seg.xMax) / 2),
     fullTop: height,
     normal: { x: normalX, z: 0 },
+    outer: false,
   }));
 }
 
@@ -252,7 +256,7 @@ function buildOuterWalls(layout: WarehouseLayout): WallMesh[] {
     ...wallAlongX(rect.xMin, rect.xMax, rect.zMin, freeHeight, mat, [], -1),
     ...wallAlongZ(rect.zMin, rect.zMax, rect.xMin, freeHeight, mat, [], -1),
     ...wallAlongZ(rect.zMin, rect.zMax, rect.xMax, freeHeight, mat, eastHoles, 1),
-  ];
+  ].map((w) => ({ ...w, outer: true }));
 }
 
 function buildInnerWalls(layout: WarehouseLayout): WallMesh[] {

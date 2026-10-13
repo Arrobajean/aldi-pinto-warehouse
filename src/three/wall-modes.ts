@@ -8,20 +8,27 @@ export function cameraDir(angleIndex: number) {
   return { x: Math.sin(rot), z: Math.cos(rot) };
 }
 
-function isOuterCut(normal: { x: number; z: number }, angleIndex: number): boolean {
+/** Muro que mira a la cámara (su normal apunta hacia ella). */
+function facesCamera(normal: { x: number; z: number }, angleIndex: number): boolean {
   const dir = cameraDir(angleIndex);
   return normal.x * dir.x + normal.z * dir.z > 0.35;
 }
 
+/** Altura de corte de los cerramientos exteriores que miran a la cámara: media altura, con el borde superior visible. */
+export const CUT_OUTER_TOP = 2.8;
+/** Altura de corte de los tabiques interiores que miran a la cámara. */
+export const CUT_INNER_TOP = 2.5;
+
 /** Altura objetivo de un muro según el modo y el ángulo de la cámara. */
-export function wallTargetHeight(wall: { fullTop: number; normal: { x: number; z: number } }, mode: WallMode, angleIndex: number): number {
+export function wallTargetHeight(wall: { fullTop: number; normal: { x: number; z: number }; outer: boolean }, mode: WallMode, angleIndex: number): number {
   switch (mode) {
     case 'down':
       return 0.3;
-    case 'cut':
-      // Tabique interior (no llega al techo): baja para que se vea el interior.
-      if (wall.fullTop < 6) return 2.5;
-      return isOuterCut(wall.normal, angleIndex) ? 1.0 : wall.fullTop;
+    case 'cut': {
+      // Solo bajan los muros que miran a la cámara; los del fondo quedan completos y cierran el edificio.
+      if (!facesCamera(wall.normal, angleIndex)) return wall.fullTop;
+      return Math.min(wall.fullTop, wall.outer ? CUT_OUTER_TOP : CUT_INNER_TOP);
+    }
     case 'up':
     default:
       return wall.fullTop;

@@ -91,3 +91,72 @@ export function stepKin(k: Kin, tx: number, tz: number, heading: HeadingMode, dt
 export function newKin(x: number, z: number, heading: number): Kin {
   return { x, z, heading, vx: 0, vz: 0 };
 }
+
+/** Estado de un vehículo de cuatro ruedas (presentación): referencia, rumbo y velocidad con signo. */
+export interface BikeState {
+  x: number;
+  z: number;
+  /** Rumbo (rotation.y). Con rumbo 0 el frente (tractora) mira a −Z: avance = (−sin h, −cos h). */
+  heading: number;
+  /** Velocidad con signo: positiva avanza, negativa marcha atrás. */
+  v: number;
+}
+
+export interface BikeOpts {
+  /** Radio de giro mínimo (m): la curvatura nunca supera 1/minRadius. */
+  minRadius: number;
+  /** Aceleración y frenado máximos (m/s²). */
+  accel: number;
+  brake: number;
+  /** Distancia mínima de anticipación del seguimiento (m). */
+  lookahead: number;
+}
+
+/**
+ * Avanza un paso un vehículo tipo bicicleta hacia (tx, tz): persecución pura con curvatura limitada.
+ * La posición avanza en la dirección del rumbo, así que no hay deslizamiento lateral ni giros instantáneos.
+ * `vCap` es la velocidad máxima (m/s, positiva); `reverse` indica marcha atrás. Devuelve la distancia con signo.
+ */
+export function stepBike(
+  b: BikeState,
+  tx: number,
+  tz: number,
+  vCap: number,
+  reverse: boolean,
+  dt: number,
+  o: BikeOpts,
+  alignTo?: number,
+): number {
+  const dx = tx - b.x;
+  const dz = tz - b.z;
+  const dist = Math.hypot(dx, dz);
+  // Distancia restante a lo largo del sentido de marcha: si el objetivo ya queda atrás, se detiene.
+  const sgn = reverse ? -1 : 1;
+  const remaining = sgn * (-Math.sin(b.heading) * dx - Math.cos(b.heading) * dz);
+  // Velocidad deseada: la máxima, sin rebasar el punto con la capacidad de frenado.
+  const speed = Math.min(vCap, Math.sqrt(2 * o.brake * Math.max(0, remaining)) * 0.9);
+  const want = reverse ? -speed : speed;
+  const dv = want - b.v;
+  b.v += Math.max(-o.brake * dt, Math.min(o.accel * dt, dv));
+
+  // Rumbo que pondría el eje de marcha hacia el objetivo (en marcha atrás, el rumbo apunta al revés).
+  const ld = Math.max(dist, o.lookahead);
+  const hd = headingFor(dx, dz, 'nz', reverse);
+  const alpha = shortestAngle(hd - b.heading);
+  const kappaMax = 1 / o.minRadius;
+  const kappa = Math.max(-kappaMax, Math.min(kappaMax, (2 * Math.sin(alpha)) / ld));
+  // El rumbo cambia en proporción a lo recorrido: giro en arco, nunca más rápido que el radio mínimo permite.
+  b.heading += kappa * Math.abs(b.v) * dt;
+  // Corrección final suave: a menos de 3 m del destino el rumbo se alinea con el de la pose de atraque,
+  // sin pasar nunca de la curvatura mínima (|v|/R), así que solo gira mientras el vehículo se mueve.
+  if (alignTo !== undefined && dist < 3) {
+    const e = shortestAngle(alignTo - b.heading);
+    const maxTurn = (Math.abs(b.v) / o.minRadius) * dt;
+    b.heading += Math.max(-maxTurn, Math.min(maxTurn, e));
+  }
+
+  const step = b.v * dt;
+  b.x += -Math.sin(b.heading) * step;
+  b.z += -Math.cos(b.heading) * step;
+  return step;
+}

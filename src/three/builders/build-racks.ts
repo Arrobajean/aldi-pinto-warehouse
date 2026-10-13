@@ -116,6 +116,49 @@ export function buildRacks(layout: WarehouseLayout): RacksModel {
   beamMesh.name = 'beams';
   group.add(beamMesh);
 
+  // --- Bancada de base bajo cada tramo de puntales (0,25 m de ancho). Una pieza por tramo, no por puntal:
+  // con una placa por puntal serían 2.430 instancias y el presupuesto de la fase 7 es de 2.000 en total.
+  const runs = layout.rackLines.flatMap((line) =>
+    line.segments.map((seg) => ({ x: line.xCenter, z: seg.zStart, len: seg.moduleCount * MODULE })),
+  );
+  const plateMesh = instanced(new THREE.BoxGeometry(0.25, 0.03, 1), postMat, runs.length);
+  runs.forEach((r, i) => {
+    postPos.set(r.x, 0.015, r.z + r.len / 2);
+    postScale.set(1, 1, r.len);
+    postMatrix.compose(postPos, postQuat, postScale);
+    plateMesh.setMatrixAt(i, postMatrix);
+  });
+  plateMesh.instanceMatrix.needsUpdate = true;
+  plateMesh.name = 'post-plates';
+  group.add(plateMesh);
+
+  // --- Arriostramiento diagonal en el plano de los puntales: una diagonal cada 4 módulos ---
+  const axisX = new THREE.Vector3(1, 0, 0);
+  const braces: { x: number; y: number; z: number; len: number; angle: number }[] = [];
+  for (const line of layout.rackLines) {
+    const y0 = 0.1;
+    const y1 = line.levels * LEVEL_HEIGHT - 0.15;
+    const dy = y1 - y0;
+    for (const seg of line.segments) {
+      for (let m = 0; m < seg.moduleCount; m += 4) {
+        const z0 = seg.zStart + m * MODULE;
+        braces.push({ x: line.xCenter, y: (y0 + y1) / 2, z: z0 + MODULE / 2, len: Math.hypot(MODULE, dy), angle: Math.atan2(-dy, MODULE) });
+      }
+    }
+  }
+  const braceMesh = instanced(new THREE.BoxGeometry(0.04, 0.04, 1), postMat, braces.length);
+  const braceQuat = new THREE.Quaternion();
+  braces.forEach((b, i) => {
+    postPos.set(b.x, b.y, b.z);
+    braceQuat.setFromAxisAngle(axisX, b.angle);
+    postScale.set(1, 1, b.len);
+    postMatrix.compose(postPos, braceQuat, postScale);
+    braceMesh.setMatrixAt(i, postMatrix);
+  });
+  braceMesh.instanceMatrix.needsUpdate = true;
+  braceMesh.name = 'braces';
+  group.add(braceMesh);
+
   // --- Palets y huecos vacíos en una sola pasada (misma semilla) ---
   const palletMat = standard(0xffffff, { roughness: 0.8, metalness: 0 });
   const palletColor = new THREE.Color();

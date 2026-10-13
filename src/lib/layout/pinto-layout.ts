@@ -19,7 +19,7 @@ import {
   type WarehouseLayout,
   type ZoneInfo,
 } from '@/lib/layout/types';
-import { DOOR_HALF, EAST_CORRIDOR_X, FACE_V, INTERIOR_DEPTH, LANE_DEPTH, dockPoint, faceXZ } from '@/lib/layout/dock-geometry';
+import { DOCK_PITCH, DOOR_HALF, EAST_CORRIDOR_X, FACE_V, INTERIOR_DEPTH, LANE_DEPTH, dockPoint, faceXZ } from '@/lib/layout/dock-geometry';
 // --- Cifras de partida (metros, ajustables) ---
 const PARCEL: Rect = { xMin: -210, xMax: 210, zMin: -150, zMax: 185 };
 const ROAD_WIDTH = 8;
@@ -203,12 +203,11 @@ function buildRackLines(): { aisles: Aisle[]; rackLines: RackLine[]; crossAisles
  * Tramo este: 24 de frío y congelado en la fachada x = 125, de sur a norte (frío 36-45, congelado 46-59).
  * Los índices y las temperaturas no cambian; solo la geometría.
  */
-const DOCK_PITCH = 3.5;
-const DOCK_BLOCK_GAP = 6;
-const SOUTH_BLOCK_PITCH = 12 * DOCK_PITCH + DOCK_BLOCK_GAP;
-const SOUTH_FIRST_U = -26.5;
-const EAST_COOL_FIRST_Z = 72;
-const EAST_FROZEN_FIRST_Z = 31;
+const DOCK_BLOCK_GAP = 8;
+const SOUTH_BLOCK_PITCH = 12 * DOCK_PITCH + DOCK_BLOCK_GAP; // 65,6
+const SOUTH_FIRST_U = -92; // bloques en −92…−39,2 | −26,4…26,4 | 39,2…92
+const EAST_COOL_FIRST_Z = 74; // frío: 74 … 30,8
+const EAST_FROZEN_FIRST_Z = 22.8; // congelado: 22,8 … −39,6
 
 function buildDocks(): Dock[] {
   const docks: Dock[] = [];
@@ -263,7 +262,8 @@ function buildSite(): SiteElements {
     carPark: { xMin: -205, xMax: -180, zMin: 10, zMax: 80 },
     fireTank: { xMin: -130, xMax: -70, zMin: -148, zMax: -132 },
     truckParking,
-    yard: { xMin: -135, xMax: 210, zMin: 80, zMax: 120 },
+    yard: { xMin: -135, xMax: 210, zMin: 80, zMax: 126 },
+    yardEast: { xMin: 125, xMax: 180, zMin: -48, zMax: 80 },
     evChargers: [
       { x: 185, z: 96 },
       { x: 193, z: 96 },

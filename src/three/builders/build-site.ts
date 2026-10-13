@@ -3,7 +3,7 @@ import type { Rect, WarehouseLayout } from '@/lib/layout/types';
 import { box, lambert, plane } from '@/three/builders/utils';
 import { concreteFloor, paintLine, PAINT_WHITE, YARD_MARK_Y, YARD_SLAB_Y } from '@/three/builders/floor';
 import { DOCK_FACE_Z, dockBlocks, dockStairX } from '@/three/builders/build-building';
-import { FACE_V, dockU, faceXZ } from '@/lib/layout/dock-geometry';
+import { DOCK_PITCH, FACE_V, dockU, faceXZ } from '@/lib/layout/dock-geometry';
 
 const ASPHALT = 0x3a4149;
 const GROUND = 0x474a45;
@@ -42,6 +42,9 @@ function buildRoads(group: THREE.Group, layout: WarehouseLayout) {
   // Patio de maniobra: hormigón industrial (no asfalto).
   const yc = asRect(layout.site.yard);
   group.add(concreteFloor(yc.w, yc.d, yc.x, YARD_SLAB_Y, yc.z, 'yard'));
+  // Patio este: misma cota que el sur; los rectángulos solo se tocan en z = 80.
+  const ye = asRect(layout.site.yardEast);
+  group.add(concreteFloor(ye.w, ye.d, ye.x, YARD_SLAB_Y, ye.z, 'yard-east'));
 }
 
 function buildMarkings(group: THREE.Group, layout: WarehouseLayout) {
@@ -55,6 +58,21 @@ function buildMarkings(group: THREE.Group, layout: WarehouseLayout) {
       const a = faceXZ(block.face, su + du, FACE_V[block.face] + 0.2);
       const b = faceXZ(block.face, su + du, FACE_V[block.face] + 6);
       paintLine(group, a.x, a.z, b.x, b.z, PAINT_WHITE, 0.35, YARD_MARK_Y);
+    }
+  }
+
+  // Calle blanca entre muelles contiguos del mismo bloque: una línea por hueco entre remolques.
+  for (const face of ['south', 'east'] as const) {
+    const us = layout.docks
+      .filter((d) => d.face === face)
+      .map((d) => dockU(d))
+      .sort((a, b) => a - b);
+    for (let i = 1; i < us.length; i++) {
+      if (us[i] - us[i - 1] > DOCK_PITCH + 1) continue;
+      const um = (us[i] + us[i - 1]) / 2;
+      const a = faceXZ(face, um, FACE_V[face] + 0.2);
+      const b = faceXZ(face, um, FACE_V[face] + 18);
+      paintLine(group, a.x, a.z, b.x, b.z, PAINT_WHITE, 0.15, YARD_MARK_Y);
     }
   }
 
@@ -160,7 +178,11 @@ function buildVegetation(group: THREE.Group, layout: WarehouseLayout) {
         : !(Math.abs(x) < 130 && z > -92 && z < 92) &&
           !(x > -214 && x < -200) &&
           !(z > -140 && z < -135 && x > -135);
-    if (away) spots.push({ x, z, s: 0.8 + rng() * 1 });
+    // Nada sobre el hormigón del patio (con 4 m de margen).
+    const onYard = [layout.site.yard, layout.site.yardEast].some(
+      (r) => x > r.xMin - 4 && x < r.xMax + 4 && z > r.zMin - 4 && z < r.zMax + 4,
+    );
+    if (away && !onYard) spots.push({ x, z, s: 0.8 + rng() * 1 });
   }
   const trunkGeo = new THREE.CylinderGeometry(0.12, 0.16, 0.8, 6);
   const folGeo = new THREE.ConeGeometry(0.7, 1.6, 6);

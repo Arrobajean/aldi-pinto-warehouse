@@ -96,6 +96,8 @@ export interface SiteElements {
   truckParking: { stalls: YardStall[] };
   /** Patio de maniobra frente a los muelles. */
   yard: Rect;
+  /** Patio de maniobra frente a la batería de muelles este (x = 125). */
+  yardEast: Rect;
   /** Puntos de recarga eléctrica de camiones. */
   evChargers: { x: number; z: number }[];
   /** Puerto de entrada del patio (acceso desde el este). */

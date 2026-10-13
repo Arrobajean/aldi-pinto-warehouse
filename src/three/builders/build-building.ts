@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Dock, DockFace, Rect, WarehouseLayout } from '@/lib/layout/types';
-import { FACE_V, dockU, faceXZ } from '@/lib/layout/dock-geometry';
+import { DOCK_PITCH, FACE_V, dockU, faceXZ } from '@/lib/layout/dock-geometry';
 import { box, lambert, plane } from '@/three/builders/utils';
 import {
   concreteFloor,
@@ -132,7 +132,7 @@ export function dockBlocks(docks: Pick<Dock, 'face' | 'x' | 'z' | 'temp'>[]): Do
       .sort((a, b) => a.u - b.u);
     for (const d of sorted) {
       const last = blocks[blocks.length - 1];
-      if (last && last.face === face && d.u - last.uMax < 4.5 && last.temp === d.temp) {
+      if (last && last.face === face && d.u - last.uMax < DOCK_PITCH + 1 && last.temp === d.temp) {
         last.uMax = d.u;
       } else {
         blocks.push({ face, uMin: d.u, uMax: d.u, temp: d.temp });

@@ -32,7 +32,9 @@ const BACK_GAP = 0.2;
 const PITCH = RACK_DEPTH * 2 + BACK_GAP + AISLE_WIDTH; // 5,6 m
 const MODULE = 2.7; // frente de módulo: 3 palets de 0,8 m
 const SLOT_WIDTH = 0.8;
-const LEVEL_HEIGHT = 1.6;
+/** Niveles de estantería unificados (nivel 0 = picking, 1..3 = reserva) y altura de cada nivel. */
+export const RACK_LEVELS = 4;
+export const LEVEL_HEIGHT = 1.6;
 
 /** RNG determinista con semilla fija (mulberry32). */
 function mulberry32(seed: number) {
@@ -59,7 +61,7 @@ const RACK_ZONES: RackZoneSpec[] = [
     zoneId: 'seco',
     storageBegin: -105,
     storageEnd: 30,
-    levels: 7,
+    levels: RACK_LEVELS,
     segments: [
       { zStart: -76, zEnd: -36 },
       { zStart: -32, zEnd: 4 },
@@ -70,14 +72,14 @@ const RACK_ZONES: RackZoneSpec[] = [
     zoneId: 'frio',
     storageBegin: 30,
     storageEnd: 125,
-    levels: 5,
+    levels: RACK_LEVELS,
     segments: [{ zStart: -76, zEnd: -29 }],
   },
   {
     zoneId: 'congelado',
     storageBegin: 70,
     storageEnd: 125,
-    levels: 6,
+    levels: RACK_LEVELS,
     segments: [{ zStart: -21, zEnd: 46 }],
   },
 ];
@@ -123,11 +125,11 @@ function buildRooms(): WarehouseRoom[] {
 
 function zones(): ZoneInfo[] {
   return [
-    { id: 'seco', label: 'Seco', color: '#c9ced6', temp: '16–22 ºC', rect: { xMin: -125, xMax: 30, zMin: -80, zMax: 50 }, storage: 'rack', levels: 7, rackSegments: RACK_ZONES[0].segments },
+    { id: 'seco', label: 'Seco', color: '#c9ced6', temp: '16–22 ºC', rect: { xMin: -125, xMax: 30, zMin: -80, zMax: 50 }, storage: 'rack', levels: RACK_LEVELS, rackSegments: RACK_ZONES[0].segments },
     { id: 'carga_baterias', label: 'Sala de carga', color: '#9aa3b5', temp: '—', rect: { xMin: -125, xMax: -105, zMin: -80, zMax: -62 }, storage: 'none' },
-    { id: 'frio', label: 'Frío', color: '#7cc4f0', temp: '+2/+4 ºC', rect: { xMin: 30, xMax: 125, zMin: -80, zMax: -25 }, storage: 'rack', levels: 5, rackSegments: RACK_ZONES[1].segments },
+    { id: 'frio', label: 'Frío', color: '#7cc4f0', temp: '+2/+4 ºC', rect: { xMin: 30, xMax: 125, zMin: -80, zMax: -25 }, storage: 'rack', levels: RACK_LEVELS, rackSegments: RACK_ZONES[1].segments },
     { id: 'fyv', label: 'Frutas y verduras', color: '#8fd694', temp: '+6 ºC · 85–90 % HR', rect: { xMin: 30, xMax: 70, zMin: -25, zMax: 50 }, storage: 'floor' },
-    { id: 'congelado', label: 'Congelado', color: '#b9e3ff', temp: '−22/−25 ºC', rect: { xMin: 70, xMax: 125, zMin: -25, zMax: 50 }, storage: 'rack', levels: 6, rackSegments: RACK_ZONES[2].segments },
+    { id: 'congelado', label: 'Congelado', color: '#b9e3ff', temp: '−22/−25 ºC', rect: { xMin: 70, xMax: 125, zMin: -25, zMax: 50 }, storage: 'rack', levels: RACK_LEVELS, rackSegments: RACK_ZONES[2].segments },
     { id: 'expedicion', label: 'Expedición', color: '#f5d06b', temp: 'según muelle', rect: { xMin: -125, xMax: 125, zMin: 50, zMax: 80 }, storage: 'staging' },
   ];
 }

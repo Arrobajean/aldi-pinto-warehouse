@@ -1,10 +1,9 @@
 import * as THREE from 'three';
 import type { WarehouseLayout } from '@/lib/layout/types';
-import { floorPalets, forEachRackSlot, seededRandom } from '@/lib/layout/pinto-layout';
+import { LEVEL_HEIGHT, floorPalets, forEachRackSlot, seededRandom } from '@/lib/layout/pinto-layout';
 import { standard } from '@/three/builders/utils';
 import { NAVE_FLOOR_H } from '@/three/builders/build-building';
 
-const LEVEL_HEIGHT = 1.6;
 const MODULE = 2.7;
 
 export interface RackPaletMeta {

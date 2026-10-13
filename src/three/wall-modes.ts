@@ -59,7 +59,7 @@ export function updateWalls(walls: WallMesh[], dt: number) {
   }
 }
 /**
- * Altura relativa de las estanterías según el modo. Con 7 niveles (≈11 m) las estanterías
+ * Altura relativa de las estanterías según el modo. Con 4 niveles (≈6,4 m) las estanterías
  * tapan los pasillos desde la vista isométrica; en recorte se bajan para ver las máquinas.
  */
 export function rackHeightScale(mode: WallMode): number {

@@ -1,5 +1,5 @@
 import type { Dock, WarehouseLayout } from '@/lib/layout/types';
-import { rackRects } from '@/lib/layout/pinto-layout';
+import { LEVEL_HEIGHT, rackRects } from '@/lib/layout/pinto-layout';
 import { articleForSku } from '@/lib/stock/catalog';
 import {
   KEEP_OUT,
@@ -305,8 +305,6 @@ function completeTask(state: SimState, deps: SimDeps, m: Machine, task: SimTask)
   m.route = [];
 }
 
-/** Altura de un nivel de rack en metros (ver LEVEL_HEIGHT del plano). */
-const LEVEL_HEIGHT = 1.6;
 /** Velocidad de subida/bajada de la horquilla, en m/s. */
 const LIFT_SPEED = 0.6;
 

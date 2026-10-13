@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { ZoneId } from '@/lib/types';
 import type { WarehouseLayout } from '@/lib/layout/types';
-import { buildPintoLayout } from '@/lib/layout/pinto-layout';
+import { buildPintoLayout, LEVEL_HEIGHT } from '@/lib/layout/pinto-layout';
 import type { SimState } from '@/lib/sim/types';
 import { SimsCamera, type SimsZoomLevel } from '@/three/sims-camera';
 import { applyWallMode, updateWalls, type WallMode } from '@/three/wall-modes';
@@ -12,6 +12,7 @@ import type { SmoothedTrack } from '@/lib/rtls/types';
 import { buildBuilding, type WallMesh } from '@/three/builders/build-building';
 import { buildSite } from '@/three/builders/build-site';
 import { buildRacks, type RacksModel } from '@/three/builders/build-racks';
+import { loadEuroPalletGlb } from '@/three/builders/pallets';
 import { buildDockLabels, buildLabels } from '@/three/builders/build-labels';
 import { buildSlotPositions } from '@/lib/sim/positions';
 import { colorForStock, type StockColorMode } from '@/lib/stock/colors';
@@ -168,6 +169,8 @@ export class WarehouseScene {
     const racksGroup = new THREE.Group();
     racksGroup.name = 'racks';
     this.racksModel = buildRacks(layout);
+    // Europalé en GLB si existe en /models; si no, queda el procedural (no bloquea el arranque).
+    loadEuroPalletGlb();
     racksGroup.add(this.racksModel.group);
     this.scene.add(racksGroup);
 
@@ -177,11 +180,11 @@ export class WarehouseScene {
 
     // Marcador de resaltado (lo coloca el buscador o el foco).
     this.highlight = new THREE.Mesh(
-      new THREE.BoxGeometry(1.5, 5, 1.05),
+      new THREE.BoxGeometry(1.5, 3 * LEVEL_HEIGHT, 1.05),
       new THREE.MeshBasicMaterial({ color: 0x22a6e0, transparent: true, opacity: 0.35, depthWrite: false }),
     );
     this.highlight.visible = false;
-    this.highlight.position.y = 2.5;
+    this.highlight.position.y = (3 * LEVEL_HEIGHT) / 2;
     this.scene.add(this.highlight);
 
     const labelsGroup = new THREE.Group();
@@ -233,6 +236,8 @@ export class WarehouseScene {
       if (layer === 'racks') {
         applyRackLayer('posts', visible);
         applyRackLayer('beams', visible);
+        applyRackLayer('post-plates', visible);
+        applyRackLayer('braces', visible);
         return;
       }
       if (layer === 'pallets') {
@@ -584,7 +589,7 @@ export class WarehouseScene {
     this.stopFollow();
     this.camera.focusOn({ x: p.x, z: p.z }, zoom ? 1 : undefined);
     if (this.highlight) {
-      this.highlight.position.set(p.x, 2.5, p.z);
+      this.highlight.position.set(p.x, (3 * LEVEL_HEIGHT) / 2, p.z);
       this.highlight.visible = true;
       this.highlightUntil = performance.now() + 8000;
     }

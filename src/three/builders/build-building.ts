@@ -175,18 +175,23 @@ function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
     group.add(paintFill(ca.xMax - ca.xMin, ca.zMax - ca.zMin, CROSS_AISLE_TONE, (ca.xMin + ca.xMax) / 2, (ca.zMin + ca.zMax) / 2, NAVE_TINT_Y));
   }
 
-  // Salas de carga y de reposo: contorno y plazas pintadas sobre el hormigón.
+  // Salas de carga y de reposo: contorno, calles de maniobra y plazas pintadas sobre el hormigón.
   for (const room of layout.rooms) {
     const r = room.rect;
     const edge = room.kind === 'carga' ? SAFETY_YELLOW : PAINT_WHITE;
     paintOutline(group, r.xMin + 0.3, r.xMax - 0.3, r.zMin + 0.3, r.zMax - 0.3, edge, 0.2);
+    // Calle de maniobra entre las dos filas de cada bloque: 3,6 m desde el borde sur de la fila norte.
+    const x0 = Math.min(...room.spots.map((s) => s.x)) - 1.3;
+    const x1 = Math.max(...room.spots.map((s) => s.x)) + 1.3;
+    for (const zn of new Set(room.spots.filter((s) => s.row === 'n').map((s) => s.z))) {
+      group.add(paintFill(x1 - x0, 3.6, CROSS_AISLE_TONE, (x0 + x1) / 2, zn + 3.8, NAVE_TINT_Y));
+    }
     for (const spot of room.spots) {
-      const sw = 2.2;
-      const sd = room.kind === 'carga' ? 2.2 : 2.6;
-      paintOutline(group, spot.x - sw / 2, spot.x + sw / 2, spot.z - sd / 2, spot.z + sd / 2, edge, 0.1);
+      paintOutline(group, spot.x - 1.2, spot.x + 1.2, spot.z - 2, spot.z + 2, edge, 0.1);
       if (room.kind === 'carga') {
-        // Cargador: columna con el cable (volumen simple).
-        group.add(box(0.9, 1.4, 0.5, lambert(0x2a3550), spot.x, 0.7, spot.z - 0.9));
+        // Cargador: columna pegada al fondo de la plaza (contra la pared), no en el centro.
+        const backZ = spot.row === 'n' ? spot.z - 1.75 : spot.z + 1.75;
+        group.add(box(0.9, 1.4, 0.5, lambert(0x2a3550), spot.x, 0.7, backZ));
       }
     }
   }

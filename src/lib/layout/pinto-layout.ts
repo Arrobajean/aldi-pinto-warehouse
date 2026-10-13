@@ -120,24 +120,45 @@ const STRAPPERS: Strapper[] = [
   },
 ];
 
-/** Salas de carga y de reposo en la franja oeste de la nave (libre de racks). */
-function buildRooms(): WarehouseRoom[] {
-  const carga: RoomSpot[] = [-122, -119, -116, -113, -110, -107].map((x, i) => ({
-    id: `CAR-${String(i + 1).padStart(2, '0')}`,
-    kind: 'carga' as const,
-    x,
-    z: -70,
-  }));
-  const reposo: RoomSpot[] = [];
-  // 6 filas de 7 plazas: 42 máquinas aparcadas (la flota tiene 41).
-  for (const z of [-59, -56, -53, -50, -47, -44]) {
-    for (const x of [-123, -120.5, -118, -115.5, -113, -110.5, -108]) {
-      reposo.push({ id: `REP-${String(reposo.length + 1).padStart(2, '0')}`, kind: 'reposo', x, z });
+// Salas de carga y de máquinas en la franja oeste (x −125…−105), libre de racks.
+const ROOM_X0 = -125;
+const ROOM_X1 = -105;
+const BAY_W = 2.6; // paso entre plazas (plaza de 2,4 m)
+const BAY_D = 4.0; // fondo de plaza (el recogepedidos con horquillas mide ≈ 3,5 m)
+const DRIVE_AISLE = 3.6; // calle de maniobra entre dos filas enfrentadas
+const TRUNK_W = 3.8; // calle troncal N-S pegada al tabique de racks
+const BAY_COLS = 6;
+const PAIR_D = 2 * BAY_D + DRIVE_AISLE; // 11,6 m por bloque de dos filas
+const BAY_X0 = ROOM_X1 - TRUNK_W - BAY_COLS * BAY_W; // −124,4
+/** Distancia del centro de cada fila a la calle de maniobra de su bloque. */
+const AISLE_OFFSET = BAY_D / 2 + DRIVE_AISLE / 2; // 3,8
+/** Z del pasillo transversal que comunica las salas con la nave (centro de la banda −36…−32). */
+const ROOM_ENTRANCE_Z = -34;
+
+/** Bloques dobles de plazas: fila norte (mira al sur) y fila sur (mira al norte), numeradas fila a fila. */
+function bayBlocks(zStart: number, blocks: number, kind: RoomSpot['kind'], prefix: string): RoomSpot[] {
+  const spots: RoomSpot[] = [];
+  for (let b = 0; b < blocks; b++) {
+    const zb = zStart + b * PAIR_D;
+    for (const row of ['n', 's'] as const) {
+      const z = row === 'n' ? zb + BAY_D / 2 : zb + BAY_D + DRIVE_AISLE + BAY_D / 2;
+      for (let c = 0; c < BAY_COLS; c++) {
+        spots.push({ id: `${prefix}-${String(spots.length + 1).padStart(2, '0')}`, kind, x: BAY_X0 + (c + 0.5) * BAY_W, z, row });
+      }
     }
   }
+  return spots;
+}
+
+/** Z de la calle de maniobra que da a una plaza (redondeada a 0,1 m para usarla en ids). */
+const spotAisleZ = (s: RoomSpot) => Math.round((s.row === 'n' ? s.z + AISLE_OFFSET : s.z - AISLE_OFFSET) * 10) / 10;
+
+function buildRooms(): WarehouseRoom[] {
   return [
-    { id: 'sala-carga', kind: 'carga', label: 'Sala de carga', rect: { xMin: -125, xMax: -105, zMin: -80, zMax: -62 }, spots: carga },
-    { id: 'sala-reposo', kind: 'reposo', label: 'Sala de máquinas', rect: { xMin: -125, xMax: -105, zMin: -62, zMax: -40 }, spots: reposo },
+    // Sala de carga: 1 bloque doble = 12 cargadores.
+    { id: 'sala-carga', kind: 'carga', label: 'Sala de carga', rect: { xMin: ROOM_X0, xMax: ROOM_X1, zMin: -80, zMax: -66 }, spots: bayBlocks(-80, 1, 'carga', 'CAR') },
+    // Sala de máquinas: 4 bloques dobles = 48 plazas (la flota tiene 41).
+    { id: 'sala-reposo', kind: 'reposo', label: 'Sala de máquinas', rect: { xMin: ROOM_X0, xMax: ROOM_X1, zMin: -66, zMax: -17 }, spots: bayBlocks(-66, 4, 'reposo', 'REP') },
   ];
 }
 
@@ -145,7 +166,7 @@ function zones(): ZoneInfo[] {
   const segs = (rz: RackZoneSpec) => rackSegments(rz.zRange);
   return [
     { id: 'seco', label: 'Seco', color: '#c9ced6', temp: '16–22 ºC', rect: { xMin: -125, xMax: 30, zMin: -80, zMax: 50 }, storage: 'rack', levels: RACK_LEVELS, rackSegments: segs(RACK_ZONES[0]) },
-    { id: 'carga_baterias', label: 'Sala de carga', color: '#9aa3b5', temp: '—', rect: { xMin: -125, xMax: -105, zMin: -80, zMax: -62 }, storage: 'none' },
+    { id: 'carga_baterias', label: 'Sala de carga', color: '#9aa3b5', temp: '—', rect: { xMin: ROOM_X0, xMax: ROOM_X1, zMin: -80, zMax: -66 }, storage: 'none' },
     { id: 'frio', label: 'Frío', color: '#7cc4f0', temp: '+2/+4 ºC', rect: { xMin: 30, xMax: COLD_RACK_END, zMin: -80, zMax: -25 }, storage: 'rack', levels: RACK_LEVELS, rackSegments: segs(RACK_ZONES[1]) },
     { id: 'fyv', label: 'Frutas y verduras', color: '#8fd694', temp: '+6 ºC · 85–90 % HR', rect: { xMin: 30, xMax: 70, zMin: -25, zMax: 50 }, storage: 'floor' },
     { id: 'congelado', label: 'Congelado', color: '#b9e3ff', temp: '−22/−25 ºC', rect: { xMin: 70, xMax: COLD_RACK_END, zMin: -25, zMax: 50 }, storage: 'rack', levels: RACK_LEVELS, rackSegments: segs(RACK_ZONES[2]) },
@@ -389,24 +410,54 @@ function buildIndoorGraph(rackLines: RackLine[], crossAisles: Rect[], docks: Doc
     addEdge(`north-${northRow[i].aisleId}`, `north-${northRow[i + 1].aisleId}`);
   }
 
-  // Salas de reposo y carga: un nodo por plaza, unidos a un vestíbulo que da a un pasillo.
-  // La sala de reposo queda pegada al frente de los racks: su acceso sale por el pasillo transversal del sur.
-  const hub = { x: -115, z: -41 };
-  const entrance = { x: -112, z: -38 };
-  addNode('room-hub', hub.x, hub.z);
-  addNode('room-entrance', entrance.x, entrance.z);
-  addEdge('room-hub', 'room-entrance');
-  let nearest = { id: '', d: Infinity };
-  for (const n of nodes) {
-    if (!n.id.startsWith('aisle-') || !n.id.includes('-X-')) continue;
-    const d = (n.x - entrance.x) ** 2 + (n.z - entrance.z) ** 2;
-    if (d < nearest.d && segmentClear(entrance.x, entrance.z, n.x, n.z, rects)) nearest = { id: n.id, d };
+  // Salas de carga y de máquinas: troncal N-S junto al tabique de racks; cada calle de maniobra tiene un nodo
+  // por columna, y cada plaza solo se une al nodo de calle de su columna (nunca cruza otra plaza).
+  const trunkId = (z: number) => `room-trunk-${z.toFixed(1)}`;
+  const trunkX = ROOM_X1 - TRUNK_W / 2;
+  const roomAisles = new Map<number, number[]>(); // z de calle → x de sus columnas
+  for (const room of rooms) {
+    for (const spot of room.spots) {
+      const zc = spotAisleZ(spot);
+      roomAisles.set(zc, [...(roomAisles.get(zc) ?? []), spot.x]);
+    }
   }
-  if (nearest.id) addEdge('room-entrance', nearest.id);
+  const trunkZs = [...roomAisles.keys(), ROOM_ENTRANCE_Z].sort((a, b) => a - b);
+  for (const z of trunkZs) addNode(trunkId(z), trunkX, z);
+  for (let i = 0; i < trunkZs.length - 1; i++) addEdge(trunkId(trunkZs[i]), trunkId(trunkZs[i + 1]));
+
+  // Entrada 1: pasillo transversal de z = −34 (nodo de pasillo más cercano con visibilidad).
+  let nearestCross = { id: '', d: Infinity };
+  for (const n of nodes) {
+    if (!n.id.endsWith(`-X-${ROOM_ENTRANCE_Z}`)) continue;
+    const d = (n.x - trunkX) ** 2 + (n.z - ROOM_ENTRANCE_Z) ** 2;
+    if (d < nearestCross.d && segmentClear(trunkX, ROOM_ENTRANCE_Z, n.x, n.z, rects)) nearestCross = { id: n.id, d };
+  }
+  if (nearestCross.id) addEdge(trunkId(ROOM_ENTRANCE_Z), nearestCross.id);
+
+  // Entrada 2: calle norte más cercana al extremo norte del troncal.
+  const topZ = trunkZs[0];
+  let nearestNorth = { id: '', d: Infinity };
+  for (const n of nodes) {
+    if (!n.id.startsWith('north-')) continue;
+    const d = (n.x - trunkX) ** 2 + (n.z - topZ) ** 2;
+    if (d < nearestNorth.d && segmentClear(trunkX, topZ, n.x, n.z, rects)) nearestNorth = { id: n.id, d };
+  }
+  if (nearestNorth.id) addEdge(trunkId(topZ), nearestNorth.id);
+
+  // Calle de maniobra: del troncal hacia el oeste, un nodo por columna.
+  for (const [zc, xs] of roomAisles) {
+    let prev = trunkId(zc);
+    for (const x of [...xs].sort((a, b) => b - a)) {
+      const id = `room-aisle-${zc.toFixed(1)}-${x.toFixed(1)}`;
+      addNode(id, x, zc);
+      addEdge(prev, id);
+      prev = id;
+    }
+  }
   for (const room of rooms) {
     for (const spot of room.spots) {
       addNode(`spot-${spot.id}`, spot.x, spot.z);
-      addEdge(`spot-${spot.id}`, 'room-hub');
+      addEdge(`spot-${spot.id}`, `room-aisle-${spotAisleZ(spot).toFixed(1)}-${spot.x.toFixed(1)}`);
     }
   }
 

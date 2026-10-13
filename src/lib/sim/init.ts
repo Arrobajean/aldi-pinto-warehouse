@@ -111,7 +111,8 @@ export function createInitialState(layout: WarehouseLayout, seed = 20260301): Si
       // Todas las máquinas empiezan aparcadas en la sala de máquinas.
       const parked = parkSpots[parkIdx++];
       if (parked) spotOccupancy[parked.id] = id;
-      const pos = parked ? { x: parked.x, z: parked.z } : { x: -115, z: -41 };
+      // Sin plaza libre (no ocurre: hay 48 plazas para 41 máquinas), se queda en el centro de la primera calle de la sala de máquinas.
+      const pos = parked ? { x: parked.x, z: parked.z } : { x: -115.3, z: -60.2 };
       machines.push({
         id,
         kind: f.kind,

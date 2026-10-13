@@ -139,6 +139,8 @@ export interface RoomSpot {
   kind: 'reposo' | 'carga';
   x: number;
   z: number;
+  /** Fila del bloque doble: 'n' mira a la calle de maniobra del sur; 's' a la del norte. */
+  row: 'n' | 's';
 }
 
 /** Sala de la nave donde se aparcan o recargan las máquinas. */

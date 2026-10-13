@@ -52,4 +52,30 @@ for (const e of layout.indoorGraph.edges) {
   }
 }
 console.log('Aristas de sala que cruzan una plaza ajena:', roomCrossings);
+
+// Aseos: ninguna arista del grafo cruza un módulo (con 0,5 m de margen) y ninguno solapa carriles, flejadoras ni salas.
+const overlaps = (a: { xMin: number; xMax: number; zMin: number; zMax: number }, b: { xMin: number; xMax: number; zMin: number; zMax: number }) =>
+  a.xMin < b.xMax && b.xMin < a.xMax && a.zMin < b.zMax && b.zMin < a.zMax;
+const obstacles = [...layout.docks.map((d) => d.laneRect), ...layout.strappers.map((s) => s.rect), ...layout.rooms.map((r) => r.rect)];
+let restroomCuts = 0;
+let restroomOverlaps = 0;
+for (const wc of layout.restrooms) {
+  const box = { xMin: wc.rect.xMin - 0.5, xMax: wc.rect.xMax + 0.5, zMin: wc.rect.zMin - 0.5, zMax: wc.rect.zMax + 0.5 };
+  restroomOverlaps += obstacles.filter((o) => overlaps(wc.rect, o)).length;
+  for (const e of layout.indoorGraph.edges) {
+    const a = nodePos.get(e.from);
+    const b = nodePos.get(e.to);
+    if (!a || !b) continue;
+    const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.1));
+    for (let i = 0; i <= steps; i++) {
+      const x = a.x + ((b.x - a.x) * i) / steps;
+      const z = a.z + ((b.z - a.z) * i) / steps;
+      if (x > box.xMin && x < box.xMax && z > box.zMin && z < box.zMax) {
+        restroomCuts++;
+        break;
+      }
+    }
+  }
+}
+console.log('Aseos:', layout.restrooms.length, '· aristas que cortan un aseo:', restroomCuts, '· solapes con carriles/flejadoras/salas:', restroomOverlaps);
 console.log('Tiendas:', STORES.length, 'por provincia:', Object.entries(STORES.reduce<Record<string, number>>((a, s) => { a[s.province] = (a[s.province] ?? 0) + 1; return a; }, {})).map(([k, v]) => `${k}=${v}`).join(', '));

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { WarehouseLayout } from '@/lib/layout/types';
 import { FACE_V, dockU, faceXZ } from '@/lib/layout/dock-geometry';
+import { NAVE_FLOOR_H } from '@/three/builders/build-building';
 
 function makeTextTexture(text: string, opts: { font?: string; size?: number; color?: string; bg?: string | null; width?: number; height?: number }) {
   const { font = '600 42px Plus Jakarta Sans, sans-serif', size = 42, color = '#12203a', bg = 'rgba(240,244,250,0.85)', width = 1024, height = 128 } = opts;
@@ -98,6 +99,25 @@ export function buildLabels(layout: WarehouseLayout): THREE.Group {
     if (!line) continue;
     const front = line.segments[line.segments.length - 1].zEnd + 1.2;
     group.add(groundLabel(aisle.id, aisle.xCenter, front, 2.4, 0.75, { font: '700 30px JetBrains Mono, monospace', width: 256, height: 64, color: '#1c2e4a' }));
+  }
+
+  // Aseos: etiqueta de suelo a la cota de la nave (1,2 m, no bajo el piso) y cartel WC sobre cada puerta.
+  const outward = { n: { x: 0, z: -1 }, s: { x: 0, z: 1 }, e: { x: 1, z: 0 }, w: { x: -1, z: 0 } };
+  for (const wc of layout.restrooms) {
+    const r = wc.rect;
+    const floorLabel = groundLabel(wc.label, (r.xMin + r.xMax) / 2, (r.zMin + r.zMax) / 2, 6, 1.5, { font: '700 36px Plus Jakarta Sans, sans-serif', color: '#1c2e4a' });
+    floorLabel.position.y = NAVE_FLOOR_H + 0.05;
+    group.add(floorLabel);
+
+    const { side, at } = wc.door;
+    const doorX = side === 'e' ? r.xMax : side === 'w' ? r.xMin : at;
+    const doorZ = side === 'n' ? r.zMin : side === 's' ? r.zMax : at;
+    const tex = makeTextTexture('WC', { font: '700 72px JetBrains Mono, monospace', size: 72, color: '#ffffff', bg: 'rgba(28,46,74,0.92)', width: 256, height: 96 });
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    sprite.scale.set(2.2, 0.8, 1);
+    sprite.position.set(doorX + outward[side].x * 0.8, NAVE_FLOOR_H + 2.6, doorZ + outward[side].z * 0.8);
+    sprite.renderOrder = 3;
+    group.add(sprite);
   }
 
   return group;

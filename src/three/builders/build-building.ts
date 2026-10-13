@@ -381,6 +381,44 @@ function buildDockFurniture(layout: WarehouseLayout): THREE.Group {
   return group;
 }
 
+/** Aseos: solera clara, cuatro cubículos al norte y dos lavabos al sur, volumen simple. Sin techo. */
+function buildRestrooms(layout: WarehouseLayout): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'aseos';
+  const partition = lambert(0xa9b8c9);
+  const basin = lambert(0xf2f5f8);
+  for (const wc of layout.restrooms) {
+    const r = wc.rect;
+    group.add(paintFill(r.xMax - r.xMin, r.zMax - r.zMin, 0xc9d6e3, (r.xMin + r.xMax) / 2, (r.zMin + r.zMax) / 2, NAVE_TINT_Y));
+    paintOutline(group, r.xMin + 0.2, r.xMax - 0.2, r.zMin + 0.2, r.zMax - 0.2, PAINT_WHITE, 0.2);
+    for (let i = 0; i < 4; i++) {
+      group.add(box(0.9, 2.0, 1.4, partition, r.xMin + 1.2 + i * 2.2, 1.0, r.zMin + 1.2));
+    }
+    for (let i = 0; i < 2; i++) {
+      group.add(box(1.0, 0.9, 0.5, basin, r.xMin + 2.5 + i * 5, 0.45, r.zMax - 0.6));
+    }
+  }
+  return group;
+}
+
+/** Muros de los aseos (3 m, con el hueco de la puerta). Van en innerWalls para que el modo muros los recorte. */
+function buildRestroomWalls(layout: WarehouseLayout): WallMesh[] {
+  const mat = lambert(0xdfe6ee);
+  const out: WallMesh[] = [];
+  for (const wc of layout.restrooms) {
+    const r = wc.rect;
+    const hole = (side: 'n' | 's' | 'e' | 'w'): Span[] =>
+      wc.door.side === side ? [{ xMin: wc.door.at - wc.door.width / 2, xMax: wc.door.at + wc.door.width / 2 }] : [];
+    out.push(
+      ...wallAlongX(r.xMin, r.xMax, r.zMin, 3.0, mat, hole('n'), -1),
+      ...wallAlongX(r.xMin, r.xMax, r.zMax, 3.0, mat, hole('s'), 1),
+      ...wallAlongZ(r.zMin, r.zMax, r.xMin, 3.0, mat, hole('w'), -1),
+      ...wallAlongZ(r.zMin, r.zMax, r.xMax, 3.0, mat, hole('e'), 1),
+    );
+  }
+  return out;
+}
+
 export function buildBuilding(layout: WarehouseLayout): BuildingModel {
   const group = new THREE.Group();
   // Todo lo de la nave (suelo, marcas, muros) se construye respecto al piso de la nave, a 1,2 m.
@@ -388,8 +426,9 @@ export function buildBuilding(layout: WarehouseLayout): BuildingModel {
   nave.name = 'nave';
   nave.position.y = NAVE_FLOOR_H;
   nave.add(buildZoneFloors(layout));
+  nave.add(buildRestrooms(layout));
   const outerWalls = buildOuterWalls(layout);
-  const innerWalls = buildInnerWalls(layout);
+  const innerWalls = [...buildInnerWalls(layout), ...buildRestroomWalls(layout)];
 
   for (const w of outerWalls) nave.add(w.mesh);
   for (const w of innerWalls) nave.add(w.mesh);

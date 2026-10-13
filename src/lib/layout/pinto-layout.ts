@@ -12,6 +12,7 @@ import {
   type RackLine,
   type RackSlot,
   type Rect,
+  type Restroom,
   type RoomSpot,
   type Strapper,
   type WarehouseRoom,
@@ -551,6 +552,16 @@ function buildYardGraph(docks: Dock[]): Graph {
   return { nodes, edges };
 }
 
+/**
+ * Aseos: tres módulos de 10 × 8 m, cada uno con una puerta a un pasillo.
+ * WC-01 junto a la sala de máquinas (oeste), WC-02 en expedición oeste, WC-03 en la esquina noreste.
+ */
+const RESTROOMS: Restroom[] = [
+  { id: 'WC-01', label: 'Aseos', rect: { xMin: -124, xMax: -114, zMin: -14, zMax: -6 }, door: { side: 'e', at: -10, width: 1.6 } },
+  { id: 'WC-02', label: 'Aseos', rect: { xMin: -122, xMax: -112, zMin: 62, zMax: 70 }, door: { side: 'n', at: -117, width: 1.6 } },
+  { id: 'WC-03', label: 'Aseos', rect: { xMin: 114, xMax: 124, zMin: -62, zMax: -54 }, door: { side: 's', at: 119, width: 1.6 } },
+];
+
 export function buildPintoLayout(): WarehouseLayout {
   const rooms = buildRooms();
   const { aisles, rackLines, crossAisles } = buildRackLines();
@@ -590,6 +601,7 @@ export function buildPintoLayout(): WarehouseLayout {
     docks,
     site,
     rooms,
+    restrooms: RESTROOMS,
     strappers: STRAPPERS,
     indoorGraph: buildIndoorGraph(rackLines, crossAisles, docks, rooms, aisles),
     yardGraph: buildYardGraph(docks),

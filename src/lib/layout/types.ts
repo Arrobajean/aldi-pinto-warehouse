@@ -152,6 +152,15 @@ export interface WarehouseRoom {
   spots: RoomSpot[];
 }
 
+/** Módulo de aseos con una puerta hacia un pasillo. */
+export interface Restroom {
+  id: string;
+  label: string;
+  rect: Rect;
+  /** Lado de la puerta y posición a lo largo de ese lado (m). */
+  door: { side: 'n' | 's' | 'e' | 'w'; at: number; width: number };
+}
+
 /** Flejadora automática: entrada (recogepedidos) y salida (transpaleta ESE). */
 export interface Strapper {
   id: string;
@@ -165,6 +174,7 @@ export interface Strapper {
 export interface WarehouseLayout {
   parcel: Rect;
   rooms: WarehouseRoom[];
+  restrooms: Restroom[];
   strappers: Strapper[];
   roadWidth: number;
   building: { rect: Rect; freeHeight: number };

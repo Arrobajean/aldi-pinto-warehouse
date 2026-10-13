@@ -6,6 +6,6 @@ export default defineConfig([
   ...nextVitals,
   ...nextTypescript,
   {
-    ignores: ['.next/**', 'out/**', 'build/**', 'dist/**', 'next-env.d.ts'],
+    ignores: ['.next/**', 'out/**', 'build/**', 'dist/**', '.claude/**', 'next-env.d.ts'],
   },
 ]);

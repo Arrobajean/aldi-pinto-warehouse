@@ -3,6 +3,7 @@ import type { WarehouseLayout } from '@/lib/layout/types';
 import { LEVEL_HEIGHT, floorPalets, forEachRackSlot, seededRandom } from '@/lib/layout/pinto-layout';
 import { standard } from '@/three/builders/utils';
 import { NAVE_FLOOR_H } from '@/three/builders/build-building';
+import { PalletBatch } from '@/three/builders/pallets';
 
 const MODULE = 2.7;
 
@@ -20,6 +21,8 @@ export interface RacksModel {
   group: THREE.Group;
   paletMesh: THREE.InstancedMesh;
   floorMesh: THREE.InstancedMesh;
+  /** Lote de palés de estantería (`paletMesh` es su malla de carga). */
+  palletBatch: PalletBatch;
   emptyMesh: THREE.InstancedMesh;
   byIndex: RackPaletMeta[];
   emptyIndex: string[];
@@ -53,7 +56,6 @@ export function buildRacks(layout: WarehouseLayout): RacksModel {
 
   const postMat = standard(0x7d8ca0, { roughness: 0.6, metalness: 0.3 });
   const beamMat = standard(0xf39200, { roughness: 0.55, metalness: 0.2 });
-  const palletGeo = new THREE.BoxGeometry(1, 1, 0.8);
 
   // --- Puntales ---
   const posts: { x: number; z: number; height: number }[] = [];
@@ -160,9 +162,9 @@ export function buildRacks(layout: WarehouseLayout): RacksModel {
   group.add(braceMesh);
 
   // --- Palets y huecos vacíos en una sola pasada (misma semilla) ---
-  const palletMat = standard(0xffffff, { roughness: 0.8, metalness: 0 });
   const palletColor = new THREE.Color();
-  const palletMesh = instanced(palletGeo, palletMat, layout.stats.racksFilled);
+  const palletBatch = new PalletBatch(layout.stats.racksFilled, { lod: 'lo' });
+  const palletMesh = palletBatch.load;
   const emptyIdxPos: { locId: string; x: number; y: number; z: number }[] = [];
   const byIndex: RackPaletMeta[] = [];
 
@@ -172,22 +174,20 @@ export function buildRacks(layout: WarehouseLayout): RacksModel {
     if (rng() <= 0.85) {
       const sku = `SKU-${1000 + Math.floor(rng() * 1800)}`;
       const temp: 'dry' | 'cool' | 'frozen' = slot.zoneId === 'frio' ? 'cool' : slot.zoneId === 'congelado' ? 'frozen' : 'dry';
-      postPos.set(slot.x, slot.y + h / 2, slot.z);
-      postScale.set(1.2, h, 0.8);
-      postMatrix.compose(postPos, postQuat, postScale);
-      palletMesh.setMatrixAt(palletIndex, postMatrix);
       palletColor.setHex(FAMILY_COLORS[Math.floor(rng() * FAMILY_COLORS.length)]);
-      palletMesh.setColorAt(palletIndex, palletColor);
+      palletBatch.set(palletIndex, slot.x, slot.y, slot.z, 0, h, palletColor);
       byIndex[palletIndex] = { locId: slot.locationId, x: slot.x, y: slot.y, z: slot.z, sku, temp, expiryDays: 5 + Math.floor(rng() * 120) };
       palletIndex++;
     } else {
       emptyIdxPos.push({ locId: slot.locationId, x: slot.x, y: slot.y, z: slot.z });
     }
   });
-  palletMesh.instanceMatrix.needsUpdate = true;
-  if (palletMesh.instanceColor) palletMesh.instanceColor.needsUpdate = true;
+  // Instancias sobrantes (racksFilled supera los palés colocados): ocultas, o se dibujarían en el origen.
+  for (let i = palletIndex; i < layout.stats.racksFilled; i++) palletBatch.hide(i);
+  palletBatch.update();
+  palletBatch.base.name = 'pallets';
   palletMesh.name = 'pallets';
-  group.add(palletMesh);
+  group.add(palletBatch.base, palletMesh);
   group.userData.palletMesh = palletMesh;
 
   // Marcadores de huecos vacíos (nivel 0) para el modo "ubicación vacía".
@@ -207,20 +207,16 @@ export function buildRacks(layout: WarehouseLayout): RacksModel {
 
   // --- Palets en el suelo de FyV (calles abiertas) ---
   const floor = floorPalets();
-  const floorMesh = instanced(palletGeo, palletMat, floor.length);
+  const floorBatch = new PalletBatch(floor.length, { lod: 'lo' });
   const floorColor = new THREE.Color(0x8fd694);
   floor.forEach((f, i) => {
     const h = 1.0 + rng() * 0.4;
-    postPos.set(f.x, h / 2, f.z);
-    postScale.set(1.2, h, 0.8);
-    postMatrix.compose(postPos, postQuat, postScale);
-    floorMesh.setMatrixAt(i, postMatrix);
-    floorMesh.setColorAt(i, floorColor);
+    floorBatch.set(i, f.x, 0, f.z, 0, h, floorColor);
   });
-  floorMesh.instanceMatrix.needsUpdate = true;
-  if (floorMesh.instanceColor) floorMesh.instanceColor.needsUpdate = true;
-  floorMesh.name = 'pallets';
-  group.add(floorMesh);
+  floorBatch.update();
+  floorBatch.base.name = 'pallets';
+  floorBatch.load.name = 'pallets';
+  group.add(floorBatch.base, floorBatch.load);
 
-  return { group, paletMesh: palletMesh, floorMesh, emptyMesh, byIndex, emptyIndex };
+  return { group, paletMesh: palletMesh, floorMesh: floorBatch.load, palletBatch, emptyMesh, byIndex, emptyIndex };
 }

@@ -30,13 +30,19 @@ const WALL_THICKNESS = 0.4;
 /** Ancho dibujado de cada calle de pre-carga (los muelles están cada 3,5 m dentro de cada bloque). */
 const LANE_DRAW_WIDTH = 2.2;
 
-/** Altura del andén de carga sobre el patio: altura de piso de un camión (remolque). */
-export const DOCK_PLATFORM_H = 1.2;
-/** Cara exterior de la fachada sur (puertas en z=80) y borde exterior del andén. */
+/** Altura del piso único de la nave sobre el patio: igual a la cota de la caja de un remolque (1,2 m). */
+export const NAVE_FLOOR_H = 1.2;
+/** Cara exterior de la fachada sur (puertas en z=80) y borde exterior de la niveladora (trasera del remolque en z=82,5). */
 export const DOCK_FACE_Z = 80;
 export const DOCK_EDGE_Z = 82.4;
-/** Longitud de la rampa interior de la niveladora (de z=79,8 hacia el interior). */
-const RAMP_RUN = 5;
+/** Peldaños de la escalera peatonal: 4 contrahuellas de 0,3 m, huella de 0,5 m. */
+const STAIR_RISERS = 4;
+const STAIR_RISE = NAVE_FLOOR_H / STAIR_RISERS;
+const STAIR_TREAD = 0.5;
+/** Escalera peatonal de un bloque de muelles: a la izquierda del bloque, fuera del ancho de los remolques. */
+export function dockStairX(block: { xMin: number }): number {
+  return block.xMin - 2.6;
+}
 
 function segmentsWithHoles(xMin: number, xMax: number, holes: { xMin: number; xMax: number }[], step = 0.25): { xMin: number; xMax: number }[] {
   const segs: { xMin: number; xMax: number }[] = [];
@@ -67,7 +73,7 @@ export function dockBlocks(docks: { x: number; temp: string }[]): { xMin: number
   return blocks;
 }
 
-/** Suelo de la nave: hormigón gris en cada zona, con las marcas de seguridad pintadas encima. */
+/** Suelo de la nave (origen en el piso de la nave): hormigón gris en cada zona, con las marcas pintadas encima. */
 function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
   const group = new THREE.Group();
 
@@ -239,8 +245,8 @@ function buildInnerWalls(layout: WarehouseLayout): WallMesh[] {
 }
 
 /**
- * Muelles: andén elevado (1,2 m) por bloques, niveladora con rampa interior, marquesinas por puerta,
- * escalones peatonales en un extremo de cada bloque y antesala de frío en las zonas refrigeradas.
+ * Muelles sobre el piso único de la nave (1,2 m): zócalo bajo la nave, niveladora a ras de piso, marquesinas,
+ * escaleras peatonales en el extremo de cada bloque de muelles y antesala de frío en las zonas refrigeradas.
  */
 function buildDockFurniture(layout: WarehouseLayout): THREE.Group {
   const group = new THREE.Group();
@@ -248,64 +254,56 @@ function buildDockFurniture(layout: WarehouseLayout): THREE.Group {
   const levelerMat = lambert(0x7a8797);
   const frameMat = lambert(0x27303f);
   const stepMat = concreteMaterial(1.4, 0.4);
-  const H = DOCK_PLATFORM_H;
+  const H = NAVE_FLOOR_H;
+
+  // Zócalo de hormigón bajo toda la nave: el piso queda a 1,2 m sobre el patio.
+  const { rect } = layout.building;
+  const plinthW = rect.xMax - rect.xMin;
+  const plinthD = rect.zMax - rect.zMin;
+  const plinth = box(plinthW, H, plinthD, concreteMaterial(plinthW, plinthD), (rect.xMin + rect.xMax) / 2, H / 2, (rect.zMin + rect.zMax) / 2);
+  plinth.name = 'nave-plinth';
+  group.add(plinth);
 
   for (const block of dockBlocks(layout.docks)) {
-    const left = block.xMin - 1.9;
-    const right = block.xMax + 1.9;
-    const w = right - left;
-    const cxBlock = (left + right) / 2;
-    // Andén macizo desde la fachada (z=79,8, bajo la pared) hasta su borde exterior.
-    const zStart = DOCK_FACE_Z - 0.2;
-    const depth = DOCK_EDGE_Z - zStart;
-    const platform = box(w, H, depth, concreteMaterial(w, depth), cxBlock, H / 2, zStart + depth / 2);
-    platform.name = `dock-platform-${block.temp}`;
-    group.add(platform);
-    // Franja de seguridad amarilla en el canto del andén.
-    group.add(paintFill(w, 0.3, SAFETY_YELLOW, cxBlock, DOCK_EDGE_Z - 0.2, H + 0.005));
-
-    // Escalones peatonales en el extremo izquierdo del bloque: bajan 0,3 m por peldaño hacia el patio.
-    const stepX = left + 0.7;
-    for (let k = 0; k < 4; k++) {
-      const top = H - (k + 1) * 0.3;
-      group.add(box(1.4, top, 0.4, stepMat, stepX, top / 2, DOCK_EDGE_Z + 0.2 + k * 0.4));
+    // Escalera peatonal a la izquierda del bloque: sube desde el patio hasta el piso de la nave.
+    const sx = dockStairX(block);
+    // Tres huellas intermedias: la primera a H-0,3 m y la última a 0,3 m; la última contrahuella llega al patio.
+    for (let k = 0; k < STAIR_RISERS - 1; k++) {
+      const top = H - (k + 1) * STAIR_RISE;
+      const zc = DOCK_FACE_Z + 0.2 + (k + 0.5) * STAIR_TREAD;
+      group.add(box(1.4, top, STAIR_TREAD, stepMat, sx, top / 2, zc));
     }
-    group.add(paintFill(1.4, 0.05, SAFETY_YELLOW, stepX, DOCK_EDGE_Z + 0.2, H + 0.005));
-
     // Antesala de frío: volumen translúcido junto a los muelles, con franja de temperatura en el suelo.
     if (block.temp !== 'dry') {
+      const w = block.xMax - block.xMin + 3.8;
+      const cxBlock = (block.xMin + block.xMax) / 2;
       const tint = block.temp === 'frozen' ? 0x9fd8ff : 0x7cc4f0;
       const zMin = 74;
       const zMax = DOCK_FACE_Z - 0.2;
-      const wAnte = w + 2;
       const cz = (zMin + zMax) / 2;
       const vol = new THREE.Mesh(
-        new THREE.BoxGeometry(wAnte, 3.2, zMax - zMin),
+        new THREE.BoxGeometry(w, 3.2, zMax - zMin),
         new THREE.MeshLambertMaterial({ color: tint, transparent: true, opacity: 0.16, depthWrite: false }),
       );
-      vol.position.set(cxBlock, 1.6, cz);
+      vol.position.set(cxBlock, H + 1.6, cz);
       vol.name = `antesala-${block.temp}`;
       group.add(vol);
-      group.add(paintFill(wAnte, 0.5, tint, cxBlock, zMin + 0.4, 0.04));
-      group.add(paintFill(wAnte, 0.25, tint, cxBlock, zMax - 0.2, 0.04));
+      group.add(paintFill(w, 0.5, tint, cxBlock, zMin + 0.4, H + 0.04));
+      group.add(paintFill(w, 0.25, tint, cxBlock, zMax - 0.2, H + 0.04));
       const panelMat = lambert(0x6fa8d6, { transparent: true, opacity: 0.6 });
-      group.add(box(0.15, 3.2, zMax - zMin, panelMat, block.xMin - 1.2, 1.6, cz));
-      group.add(box(0.15, 3.2, zMax - zMin, panelMat, block.xMax + 1.2, 1.6, cz));
+      group.add(box(0.15, 3.2, zMax - zMin, panelMat, block.xMin - 1.9, H + 1.6, cz));
+      group.add(box(0.15, 3.2, zMax - zMin, panelMat, block.xMax + 1.9, H + 1.6, cz));
     }
   }
 
   for (const dock of layout.docks) {
     const cx = dock.x;
-    // Niveladora: rampa metálica interior, desde el andén hasta el suelo de la nave.
-    const theta = Math.atan(H / RAMP_RUN);
-    const len = Math.hypot(RAMP_RUN, H);
-    const rampZ = DOCK_FACE_Z - 0.2 - RAMP_RUN / 2;
-    const ramp = box(dock.doorWidth, 0.1, len, levelerMat, cx, H / 2, rampZ);
-    ramp.rotation.x = -theta;
-    group.add(ramp);
-
-    // Placa de la niveladora sobre el andén (labio que se apoya en la caja del camión).
-    group.add(box(dock.doorWidth, 0.05, DOCK_EDGE_Z - DOCK_FACE_Z + 0.2, levelerMat, cx, H + 0.025, (DOCK_EDGE_Z + DOCK_FACE_Z - 0.2) / 2));
+    // Niveladora: placa a ras de piso desde la fachada hasta la trasera del remolque, con dos apoyos.
+    const plateD = DOCK_EDGE_Z - DOCK_FACE_Z + 0.2;
+    group.add(box(dock.doorWidth, 0.05, plateD, levelerMat, cx, H - 0.025, DOCK_FACE_Z - 0.2 + plateD / 2));
+    for (const sx of [-1, 1]) {
+      group.add(box(0.25, H - 0.05, 0.25, frameMat, cx + (sx * dock.doorWidth) / 2 - sx * 0.2, (H - 0.05) / 2, DOCK_FACE_Z + 1.2));
+    }
 
     // Marquesina a 4,3 m con dos pilares fuera del ancho del remolque (2,55 m).
     group.add(box(3.2, 0.25, 2.0, shelterMat, cx, 4.45, 81.2));
@@ -313,9 +311,9 @@ function buildDockFurniture(layout: WarehouseLayout): THREE.Group {
     group.add(box(0.18, 3.1, 0.18, shelterMat, cx + 1.5, H + 1.55, 82.1));
 
     // Marco de la puerta.
-    group.add(box(3.0, 0.2, 0.2, frameMat, cx, 2.6, 80.1));
-    group.add(box(0.2, 2.6, 0.2, frameMat, cx - 1.5, 1.3, 80.1));
-    group.add(box(0.2, 2.6, 0.2, frameMat, cx + 1.5, 1.3, 80.1));
+    group.add(box(3.0, 0.2, 0.2, frameMat, cx, H + 1.4, 80.1));
+    group.add(box(0.2, 2.6, 0.2, frameMat, cx - 1.5, H + 1.3, 80.1));
+    group.add(box(0.2, 2.6, 0.2, frameMat, cx + 1.5, H + 1.3, 80.1));
   }
 
   return group;
@@ -327,11 +325,16 @@ function buildOuterAndInner(layout: WarehouseLayout) {
 
 export function buildBuilding(layout: WarehouseLayout): BuildingModel {
   const group = new THREE.Group();
-  group.add(buildZoneFloors(layout));
+  // Todo lo de la nave (suelo, marcas, muros) se construye respecto al piso de la nave, a 1,2 m.
+  const nave = new THREE.Group();
+  nave.name = 'nave';
+  nave.position.y = NAVE_FLOOR_H;
+  nave.add(buildZoneFloors(layout));
   const { outer: outerWalls, inner: innerWalls } = buildOuterAndInner(layout);
 
-  for (const w of outerWalls) group.add(w.mesh);
-  for (const w of innerWalls) group.add(w.mesh);
+  for (const w of outerWalls) nave.add(w.mesh);
+  for (const w of innerWalls) nave.add(w.mesh);
+  group.add(nave);
 
   group.add(buildDockFurniture(layout));
 

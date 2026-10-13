@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { WarehouseLayout } from '@/lib/layout/types';
 import { floorPalets, forEachRackSlot, seededRandom } from '@/lib/layout/pinto-layout';
 import { standard } from '@/three/builders/utils';
+import { NAVE_FLOOR_H } from '@/three/builders/build-building';
 
 const LEVEL_HEIGHT = 1.6;
 const MODULE = 2.7;
@@ -47,6 +48,8 @@ function instanced(geom: THREE.BufferGeometry, material: THREE.Material, count: 
 
 export function buildRacks(layout: WarehouseLayout): RacksModel {
   const group = new THREE.Group();
+  // Racks sobre el piso de la nave (1,2 m): las coordenadas de layout son relativas al piso.
+  group.position.y = NAVE_FLOOR_H;
   const rng = seededRandom();
 
   const postMat = standard(0x7d8ca0, { roughness: 0.6, metalness: 0.3 });

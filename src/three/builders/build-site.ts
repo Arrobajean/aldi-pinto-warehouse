@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Rect, WarehouseLayout } from '@/lib/layout/types';
 import { box, lambert, plane } from '@/three/builders/utils';
 import { concreteFloor, paintLine, PAINT_WHITE } from '@/three/builders/floor';
-import { dockBlocks } from '@/three/builders/build-building';
+import { DOCK_EDGE_Z, dockBlocks, dockStairX } from '@/three/builders/build-building';
 
 const ASPHALT = 0x3a4149;
 const GROUND = 0x474a45;
@@ -49,9 +49,9 @@ function buildMarkings(group: THREE.Group, layout: WarehouseLayout) {
 
   // Paso peatonal (cebra blanca) desde la escalera de cada bloque de muelles hacia el patio.
   for (const block of dockBlocks(layout.docks)) {
-    const stepX = block.xMin - 1.9 + 0.7;
+    const stepX = dockStairX(block);
     for (const dx of [-0.45, 0, 0.45]) {
-      paintLine(group, stepX + dx, 84, stepX + dx, 90, PAINT_WHITE, 0.35);
+      paintLine(group, stepX + dx, DOCK_EDGE_Z + 0.2, stepX + dx, DOCK_EDGE_Z + 6, PAINT_WHITE, 0.35);
     }
   }
 

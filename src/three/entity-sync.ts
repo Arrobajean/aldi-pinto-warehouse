@@ -4,7 +4,7 @@ import { forEachRackSlot } from '@/lib/layout/pinto-layout';
 import type { Machine, SimState, Truck } from '@/lib/sim/types';
 import { createErE225i, createOrderPicker, createPalletTruck, createReachTruck, createTruck, TRAILER_DOCK_LIFT } from '@/three/builders/models';
 import type { RacksModel } from '@/three/builders/build-racks';
-import { DOCK_EDGE_Z, DOCK_FACE_Z, DOCK_PLATFORM_H } from '@/three/builders/build-building';
+import { DOCK_EDGE_Z, DOCK_FACE_Z, NAVE_FLOOR_H } from '@/three/builders/build-building';
 import { newKin, stepKin, type Kin, type KinOpts } from '@/three/motion';
 
 /** Sube al GPU solo el rango de instancias modificado en este fotograma. */
@@ -44,9 +44,6 @@ type ModelRef = {
 const DOCK_TRUCK_REAR_Z = DOCK_EDGE_Z + 0.1;
 /** Origen del camión atracado: su remolque (trasera en local z=+11,6) mira hacia la nave con heading π. */
 const DOCK_TRUCK_Z = DOCK_TRUCK_REAR_Z + 11.6;
-/** Tramo de rampa interior de la niveladora (de z=79,8 a z=74,8), donde las máquinas suben al andén. */
-const RAMP_Z_FAR = DOCK_FACE_Z - 5.2;
-const RAMP_Z_NEAR = DOCK_FACE_Z - 0.2;
 /** Radio de la rueda de las máquinas y de los camiones (para el giro según la distancia). */
 const MACHINE_WHEEL_R = 0.13;
 const TRUCK_WHEEL_R = 0.4;
@@ -58,8 +55,8 @@ const SMOOTH_RATE = 6;
 
 /** Altura de un palé en rack (igual que en build-racks). */
 const RACK_PALET_H = 1.2;
-/** Altura del centro de un palé apoyado en el suelo (caja de 0,5 m). */
-const FLOOR_PALET_Y = 0.25;
+/** Altura del centro de un palé apoyado en el piso de la nave (caja de 0,5 m). */
+const FLOOR_PALET_Y = NAVE_FLOOR_H + 0.25;
 /** Altura del centro de un palé sobre las horquillas (origen de horquilla + tablero). */
 const FORK_PALET_Y = 0.28;
 /** Separación entre palés contiguos en una fila o en la plataforma. */
@@ -117,7 +114,7 @@ export class EntitySync {
     let n = 0;
     forEachRackSlot(layout, (slot) => {
       this.slotIndex.set(slot.locationId, n++);
-      this.slotPos.set(slot.locationId, { x: slot.x, y: slot.y, z: slot.z });
+      this.slotPos.set(slot.locationId, { x: slot.x, y: slot.y + NAVE_FLOOR_H, z: slot.z });
     });
     this.slotMesh = new THREE.InstancedMesh(this.slotGeo, this.paletMat, n);
     this.slotMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -331,13 +328,11 @@ export class EntitySync {
     return { x: t.pos.x, z: t.pos.z, heading: t.heading ?? 0 };
   }
 
-  /** Altura del suelo bajo una máquina: la rampa de la niveladora sube desde la nave hasta el andén. */
+  /** Altura del piso bajo una máquina: el piso de la nave (1,2 m) dentro de la nave, el patio fuera. */
   private floorY(x: number, z: number): number {
-    if (z < RAMP_Z_FAR || z > RAMP_Z_NEAR) return 0;
-    for (const dock of this.layout.docks) {
-      if (Math.abs(x - dock.x) < 1.6) return (DOCK_PLATFORM_H * (z - RAMP_Z_FAR)) / (RAMP_Z_NEAR - RAMP_Z_FAR);
-    }
-    return 0;
+    const { rect } = this.layout.building;
+    const inside = x > rect.xMin && x < rect.xMax && z > rect.zMin && z < DOCK_FACE_Z - 0.2;
+    return inside ? NAVE_FLOOR_H : 0;
   }
 
   /** Pose dibujada de una máquina: giro en arco, aceleración suave, ruedas y operario (presentación). */

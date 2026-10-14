@@ -1,7 +1,7 @@
 # Gemelo digital — Plataforma logística ALDI Pinto
 
 Visor 3D tipo **Los Sims 1** de la plataforma logística de ALDI en Pinto (Madrid):
-almacén de ~40.000 m², máquinas con localización en tiempo real (RTLS simulado),
+almacén de 50.895 m², máquinas con localización en tiempo real (RTLS simulado),
 stock por ubicación, muelles, camiones y un asistente IA (RAG sobre el estado en vivo).
 
 > **Datos simulados con fines de demostración.** No hay plano interior público:

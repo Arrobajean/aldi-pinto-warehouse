@@ -29,7 +29,7 @@ export interface StoreDestination {
 export interface RagDocumentChunk {
   id: string;
   title: string;
-  category: 'almacen' | 'tiendas' | 'frio' | 'maquinaria' | 'operaciones' | 'seguridad';
+  category: 'almacen' | 'tiendas' | 'frio' | 'maquinaria' | 'operaciones' | 'seguridad' | 'productos';
   content: string;
   keywords: string[];
 }

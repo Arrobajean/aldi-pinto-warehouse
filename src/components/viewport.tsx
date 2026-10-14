@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type MutableRefObject } from 'react';
+import { memo, useEffect, useRef, type MutableRefObject } from 'react';
 import type { ZoneId } from '@/lib/types';
 import { WarehouseScene, type SceneLayerId } from '@/three/warehouse-scene';
 import type { WallMode } from '@/three/wall-modes';
@@ -17,7 +17,7 @@ interface ViewportProps {
 }
 
 /** Monta la escena three. Se carga con next/dynamic(ssr:false) desde el contenedor. */
-export function Viewport({ sceneRef, layers, wallMode, onSelect, onHoverZone, onSelectEntity, onHoverEntity, onSelectStock }: ViewportProps) {
+export const Viewport = memo(function Viewport({ sceneRef, layers, wallMode, onSelect, onHoverZone, onSelectEntity, onHoverEntity, onSelectStock }: ViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const callbacks = useRef({ onSelect, onHoverZone, onSelectEntity, onHoverEntity, onSelectStock });
 
@@ -52,4 +52,4 @@ export function Viewport({ sceneRef, layers, wallMode, onSelect, onHoverZone, on
   }, [layers, wallMode, sceneRef]);
 
   return <div ref={containerRef} className="absolute inset-0" />;
-}
+});

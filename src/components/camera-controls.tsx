@@ -1,58 +1,103 @@
 'use client';
 
+import { memo } from 'react';
 import { RotateCcw, RotateCw, Maximize2, Boxes } from 'lucide-react';
+import type { MutableRefObject } from 'react';
 import type { SimsZoomLevel } from '@/three/sims-camera';
 import type { WallMode } from '@/three/wall-modes';
+import type { WarehouseScene } from '@/three/warehouse-scene';
+import { Compass } from '@/components/compass';
+import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface CameraControlsProps {
+  sceneRef?: MutableRefObject<WarehouseScene | null>;
   zoomLevel: SimsZoomLevel;
   wallMode: WallMode;
   onRotate: (dir: 1 | -1) => void;
+  onLookTowards?: (cardinal: 'N' | 'S' | 'E' | 'O') => void;
   onZoom: (level: SimsZoomLevel) => void;
   onWallMode: () => void;
   onReset: () => void;
 }
 
-const btn =
-  'flex h-9 w-10 items-center justify-center rounded-lg border border-line bg-panel text-fg shadow-card transition-colors hover:border-accent hover:bg-panel-strong';
-
 const WALL_MODE_LABELS: Record<WallMode, string> = { up: 'completos', cut: 'recorte', down: 'bajados' };
 
-export function CameraControls({ zoomLevel, wallMode, onRotate, onZoom, onWallMode, onReset }: CameraControlsProps) {
+export const CameraControls = memo(function CameraControls({
+  sceneRef,
+  zoomLevel,
+  wallMode,
+  onRotate,
+  onLookTowards,
+  onZoom,
+  onWallMode,
+  onReset,
+}: CameraControlsProps) {
   return (
-    <div className="absolute right-3 bottom-3 z-30 flex flex-col gap-1.5">
+    <div className="pointer-events-auto absolute bottom-3 right-3 z-30 flex flex-col items-end gap-2">
+      <Compass sceneRef={sceneRef} onLookTowards={onLookTowards} />
+
       <div className="flex justify-end gap-1.5">
-        <button className={btn} title="Rotar ⟲" onClick={() => onRotate(-1)}>
-          <RotateCcw size={15} />
-        </button>
-        <button className={btn} title="Rotar ⟳" onClick={() => onRotate(1)}>
-          <RotateCw size={15} />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button size="icon" variant="outline" className="size-9 bg-card/90 backdrop-blur" onClick={() => onRotate(-1)}>
+              <RotateCcw />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Rotar ⟲</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button size="icon" variant="outline" className="size-9 bg-card/90 backdrop-blur" onClick={() => onRotate(1)}>
+              <RotateCw />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Rotar ⟳</TooltipContent>
+        </Tooltip>
       </div>
+
       <div className="flex justify-end gap-1.5">
         {([1, 2, 3] as SimsZoomLevel[]).map((lvl) => (
-          <button
+          <Button
             key={lvl}
-            className={`${btn} ${zoomLevel === lvl ? 'border-accent !text-accent' : ''}`}
+            size="icon"
+            variant={zoomLevel === lvl ? 'default' : 'outline'}
+            className="size-9 bg-card/90 font-mono backdrop-blur"
             title={`Zoom ${lvl}`}
             onClick={() => onZoom(lvl)}
           >
             {lvl}
-          </button>
+          </Button>
         ))}
       </div>
+
       <div className="flex justify-end gap-1.5">
-        <button
-          className={`${btn} ${wallMode !== 'up' ? 'border-accent !text-accent' : ''}`}
-          title={`Modo de muros (M): ${WALL_MODE_LABELS[wallMode]}`}
-          onClick={onWallMode}
-        >
-          <Boxes size={15} />
-        </button>
-        <button className={btn} title="Vista general (F)" onClick={onReset}>
-          <Maximize2 size={15} />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="icon"
+              variant={wallMode !== 'up' ? 'default' : 'outline'}
+              className="size-9 bg-card/90 backdrop-blur"
+              onClick={onWallMode}
+            >
+              <Boxes />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Muros y racks (M): {WALL_MODE_LABELS[wallMode]}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button size="icon" variant="outline" className="size-9 bg-card/90 backdrop-blur" onClick={onReset}>
+              <Maximize2 />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Vista general (F)</TooltipContent>
+        </Tooltip>
       </div>
     </div>
   );
-}
+});

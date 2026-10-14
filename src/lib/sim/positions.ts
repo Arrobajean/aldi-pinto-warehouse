@@ -1,8 +1,8 @@
-import type { Point } from '@/lib/sim/types';
-import type { Dock, WarehouseLayout } from '@/lib/layout/types';
-import type { ZoneId } from '@/lib/types';
-import { forEachRackSlot } from '@/lib/layout/pinto-layout';
 import { INTERIOR_DEPTH, LANE_DEPTH, dockPoint } from '@/lib/layout/dock-geometry';
+import { forEachRackSlot } from '@/lib/layout/pinto-layout';
+import type { Dock, WarehouseLayout } from '@/lib/layout/types';
+import type { Point } from '@/lib/sim/types';
+import type { ZoneId } from '@/lib/types';
 
 export const RACK_ZONE_OF_TEMP: Record<'dry' | 'cool' | 'frozen', 'seco' | 'frio' | 'congelado'> = {
   dry: 'seco',
@@ -42,4 +42,4 @@ export function parkPoint(dockIndex: number): Point {
 }
 
 /** Fuera de la parcela: punto de generación de camiones. */
-export const KEEP_OUT: Point = { x: 235, z: 178 };
+export const KEEP_OUT: Point = { x: 258, z: 178 };

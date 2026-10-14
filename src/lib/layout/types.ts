@@ -68,7 +68,8 @@ export interface Dock {
   /** Centro de la puerta (x = 125 en la fachada este; z = 80 en la sur). */
   x: number;
   z: number;
-  kind: 'inbound' | 'outbound';
+  /** Entrada (proveedores), salida (tiendas) o mixto: carga y descarga (muelles de frío congelado). */
+  kind: 'inbound' | 'outbound' | 'mixed';
   temp: 'dry' | 'cool' | 'frozen';
   doorWidth: number;
   levelerDepth: number;
@@ -86,10 +87,6 @@ export interface YardStall {
 export interface SiteElements {
   guardBooth: { x: number; z: number };
   weighbridge: { x: number; z: number };
-  /** Oficinas + vestuarios (2 plantas). */
-  offices: Rect;
-  /** Aparcamiento de turismos del personal. */
-  carPark: Rect;
   /** Depósito contra incendios + caseta de bombas. */
   fireTank: Rect;
   /** Aparcamiento de semirremolques (plazas de 4 × 17 m). */
@@ -100,8 +97,10 @@ export interface SiteElements {
   yardEast: Rect;
   /** Puntos de recarga eléctrica de camiones. */
   evChargers: { x: number; z: number }[];
-  /** Puerto de entrada del patio (acceso desde el este). */
+  /** Línea de las barreras de entrada y salida (centro de la isleta de la garita). */
   gate: { x: number; z: number };
+  /** Calzadas de acceso y salida de camiones (asfalto), dentro de la parcela. */
+  access: Rect[];
 }
 
 export interface GraphNode {
@@ -115,6 +114,8 @@ export interface GraphEdge {
   to: string;
   /** Coste opcional (metros). Se calcula como distancia euclídea si falta. */
   cost?: number;
+  /** Si true, la arista es de sentido único (solo from -> to). Si false/undefined, bidireccional. */
+  directed?: boolean;
 }
 
 export interface Graph {
@@ -123,7 +124,7 @@ export interface Graph {
 }
 
 export interface LayoutStats {
-  /** Superficie de la nave (debe sumar 40.000 m²). */
+  /** Superficie de la nave en m²: ancho × fondo de la geometría real (261 × 195 = 50.895 m²), sin la sala anexa. */
   surface: number;
   /** Nº total de ubicaciones de palet. */
   locations: number;
@@ -139,8 +140,8 @@ export interface RoomSpot {
   kind: 'reposo' | 'carga';
   x: number;
   z: number;
-  /** Fila del bloque doble: 'n' mira a la calle de maniobra del sur; 's' a la del norte. */
-  row: 'n' | 's';
+  /** Fila o columna de la plaza ('w': columna oeste pegada al muro; 'e': columna este). */
+  row?: 'n' | 's' | 'w' | 'e';
 }
 
 /** Sala de la nave donde se aparcan o recargan las máquinas. */
@@ -150,6 +151,11 @@ export interface WarehouseRoom {
   label: string;
   rect: Rect;
   spots: RoomSpot[];
+  /**
+   * Calles de maniobra que se pintan en tono claro. Si falta, se pintan las dos calles de la franja oeste de la nave
+   * (x = −118,5 y x = −109,5) a lo largo de todo `rect`. La sala anexa las declara aquí porque tiene las suyas.
+   */
+  lanes?: Rect[];
 }
 
 /** Módulo de aseos con una puerta hacia un pasillo. */
@@ -171,13 +177,51 @@ export interface Strapper {
   secondsPerPallet: number;
 }
 
+/**
+ * Calle de una playa de consolidación: empieza en (x, z) y acaba `length` m más allá en la dirección (dirX, dirZ).
+ * Los palés entran por la cabecera (x, z) y la fila se apila hacia el fondo, desde donde recoge la transpaleta.
+ */
+export interface ConsolidationLane {
+  id: string;
+  x: number;
+  z: number;
+  dirX: number;
+  dirZ: number;
+  length: number;
+}
+
+/** Playa de consolidación: pedidos ya flejados a la espera de la transpaleta que los lleva al muelle. */
+export interface ConsolidationArea {
+  id: string;
+  label: string;
+  /** Temperaturas de los palés que se consolidan aquí (la simulación elige la playa por la temperatura del palé). */
+  temps: ('dry' | 'cool' | 'frozen')[];
+  rect: Rect;
+  /** Calles de la playa: una por pedido/muelle en curso; los palés se apilan a lo largo de la calle. */
+  lanes: ConsolidationLane[];
+  /** Punto de entrega (preparador/flejadora) junto a la cabecera de las calles. La recogida se hace en cada fila. */
+  dropPoint: { x: number; z: number };
+}
+
 export interface WarehouseLayout {
   parcel: Rect;
   rooms: WarehouseRoom[];
   restrooms: Restroom[];
   strappers: Strapper[];
+  consolidation: ConsolidationArea[];
   roadWidth: number;
-  building: { rect: Rect; freeHeight: number };
+  building: {
+    rect: Rect;
+    freeHeight: number;
+    /**
+     * Ampliación de la nave hacia el oeste (sala de máquinas anexa). No forma parte de `rect`: la nave sigue siendo
+     * el rectángulo principal y la anexa es una prolongación a la misma cota de piso (NAVE_FLOOR_H), con el mismo
+     * suelo, zócalo y muros a altura completa, sin cubierta. Comparte con la nave el muro x = rect.xMin, que en el
+     * tramo de la anexa es un tabique interior (`buildPartitions`, id 'annex-e') con una puerta de 6 m. Quien pregunte
+     * si un punto está «dentro de la nave» (cota de piso, malla de navegación) debe contar también este rectángulo.
+     */
+    annex?: Rect;
+  };
   zones: ZoneInfo[];
   aisles: Aisle[];
   rackLines: RackLine[];
@@ -195,6 +239,7 @@ export interface RackSlot {
   zoneId: ZoneId;
   rackLineId: string;
   aisleId: string;
+  /** Módulo publicado en el código: impares en el lado B, pares en el A (2·n − 1 / 2·n). */
   module: number;
   level: number;
   slot: 0 | 1 | 2;

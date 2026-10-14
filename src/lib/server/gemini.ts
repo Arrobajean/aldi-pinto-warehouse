@@ -35,8 +35,11 @@ async function geminiFetch(path: string, body: unknown): Promise<{ ok: boolean; 
     },
     body: JSON.stringify(body),
   });
+  if (!res.ok) {
+    return { ok: false, status: res.status, data: null };
+  }
   const data = await res.json().catch(() => null);
-  return { ok: res.ok, status: res.status, data };
+  return { ok: true, status: res.status, data };
 }
 
 function embedValues(embedding: unknown): number[] | null {

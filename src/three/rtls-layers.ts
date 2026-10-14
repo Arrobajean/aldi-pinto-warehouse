@@ -87,10 +87,13 @@ export class RtlsLayers {
     }
   }
 
+  private heatImg: ImageData | null = null;
+
   private renderHeatMap() {
     const ctx = this.heatCanvas.getContext('2d');
     if (!ctx) return;
-    const img = ctx.createImageData(this.gridW, this.gridH);
+    if (!this.heatImg) this.heatImg = ctx.createImageData(this.gridW, this.gridH);
+    const img = this.heatImg;
     for (let i = 0; i < this.grid.length; i++) {
       const v = this.grid[i];
       const r = Math.min(255, Math.floor(255 * v));

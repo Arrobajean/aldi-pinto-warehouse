@@ -1,0 +1,1631 @@
+[
+  {
+    "_id": "OP-101",
+    "name": "Elena Carrasco",
+    "department": "preparacion",
+    "departmentLabel": "Preparación",
+    "role": "Preparadora de pedidos (Voice-Picking)",
+    "assignedZone": "frio",
+    "assignedZoneLabel": "Frío",
+    "todayTask": "Picking en el frío (cámara refrigerada +2ºC a +4ºC, lácteos y carnes con terminal de voz)",
+    "machineId": "P-01",
+    "machineKind": "recogepedidos",
+    "machineModel": "Recogepedidos Jungheinrich ECD 320",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "Frío"
+    ],
+    "epi": [
+      "Calzado S3 antideslizante",
+      "Chaleco reflectante Clase 2",
+      "Ropa térmica EN 342 (+2ºC)",
+      "Auricular Voice-Picking"
+    ],
+    "certificaciones": [
+      "Operador Picking por Voz SGA",
+      "Buenas Prácticas Higiénicas (BPH) Cadena de Frío"
+    ],
+    "antiguedadAnios": 4,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 15,
+      "diasPendientes": 15,
+      "proximoPeriodo": "16 al 31 de Julio",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Miércoles",
+      "descripcion": "2 días a la semana: Domingos fijos + Miércoles rotativo"
+    }
+  },
+  {
+    "_id": "OP-102",
+    "name": "Sergio Bravo",
+    "department": "preparacion",
+    "departmentLabel": "Preparación",
+    "role": "Preparador de pedidos (Voice-Picking)",
+    "assignedZone": "frio",
+    "assignedZoneLabel": "Frío",
+    "todayTask": "Picking en el frío (cámara refrigerada +2ºC a +4ºC, embutidos y platos preparados La Cocina de ALDI)",
+    "machineId": "P-02",
+    "machineKind": "recogepedidos",
+    "machineModel": "Recogepedidos Jungheinrich ECD 320",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "Frío"
+    ],
+    "epi": [
+      "Calzado S3 antideslizante",
+      "Chaleco reflectante Clase 2",
+      "Ropa térmica EN 342 (+2ºC)",
+      "Auricular Voice-Picking"
+    ],
+    "certificaciones": [
+      "Operador Picking por Voz SGA",
+      "Manipulación Alimentos Frescos"
+    ],
+    "antiguedadAnios": 3,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 14,
+      "diasPendientes": 16,
+      "proximoPeriodo": "1 al 15 de Agosto",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Jueves",
+      "descripcion": "2 días a la semana: Domingos fijos + Jueves rotativo"
+    }
+  },
+  {
+    "_id": "OP-103",
+    "name": "Laura Peña",
+    "department": "preparacion",
+    "departmentLabel": "Preparación",
+    "role": "Preparadora de pedidos especialista frío extremo",
+    "assignedZone": "congelado",
+    "assignedZoneLabel": "Congelado",
+    "todayTask": "Picking en congelado (cámara a -22ºC con EPI térmico nivel 3 y descansos reglamentarios PRL)",
+    "machineId": "P-03",
+    "machineKind": "recogepedidos",
+    "machineModel": "Recogepedidos Jungheinrich ECD 320",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "Congelado"
+    ],
+    "epi": [
+      "Traje frigorífico nivel 3 (-30ºC EN 342)",
+      "Guantes criogénicos",
+      "Pasamontañas térmico",
+      "Calzado S3 térmico con suela aislante"
+    ],
+    "certificaciones": [
+      "PRL Ambientes Criogénicos y Frío Extremo",
+      "Voice-Picking SGA Frío"
+    ],
+    "antiguedadAnios": 5,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 16,
+      "diasPendientes": 14,
+      "proximoPeriodo": "1 al 15 de Julio",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Lunes",
+      "descripcion": "2 días a la semana: Domingos fijos + Lunes rotativo"
+    }
+  },
+  {
+    "_id": "OP-104",
+    "name": "Pedro Navas",
+    "department": "preparacion",
+    "departmentLabel": "Preparación",
+    "role": "Preparador de pedidos (Voice-Picking)",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Picking en seco (nivel 0 de estanterías, pasillos de Bebidas, Aguas y Bodega)",
+    "machineId": "P-04",
+    "machineKind": "recogepedidos",
+    "machineModel": "Recogepedidos Jungheinrich ECD 320",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "Bebidas"
+    ],
+    "epi": [
+      "Calzado S3 de seguridad",
+      "Chaleco reflectante Clase 2",
+      "Guantes de agarre ergonómicos"
+    ],
+    "certificaciones": [
+      "Voice-Picking SGA",
+      "Ergonomía y Manipulación Manual de Cargas"
+    ],
+    "antiguedadAnios": 2,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 12,
+      "diasPendientes": 18,
+      "proximoPeriodo": "16 al 31 de Agosto",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Martes",
+      "descripcion": "2 días a la semana: Domingos fijos + Martes rotativo"
+    }
+  },
+  {
+    "_id": "OP-105",
+    "name": "Ana López",
+    "department": "preparacion",
+    "departmentLabel": "Preparación",
+    "role": "Preparadora de pedidos (Voice-Picking)",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Picking en seco (nivel 0 de estanterías, pasillos de Aceites, Salsas y Despensa general)",
+    "machineId": "P-05",
+    "machineKind": "recogepedidos",
+    "machineModel": "Recogepedidos Jungheinrich ECD 320",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "Aceites y salsas"
+    ],
+    "epi": [
+      "Calzado S3 de seguridad",
+      "Chaleco reflectante Clase 2",
+      "Guantes anticorte nivel 1"
+    ],
+    "certificaciones": [
+      "Voice-Picking SGA"
+    ],
+    "antiguedadAnios": 3,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 15,
+      "diasPendientes": 15,
+      "proximoPeriodo": "1 al 15 de Septiembre",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Viernes",
+      "descripcion": "2 días a la semana: Domingos fijos + Viernes rotativo"
+    }
+  },
+  {
+    "_id": "OP-106",
+    "name": "Raúl Cuesta",
+    "department": "preparacion",
+    "departmentLabel": "Preparación",
+    "role": "Preparador de pedidos (Voice-Picking)",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Picking en seco (nivel 0 de estanterías, pasillos de Legumbres, Pastas y Arroces)",
+    "machineId": "P-06",
+    "machineKind": "recogepedidos",
+    "machineModel": "Recogepedidos Jungheinrich ECD 320",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "Legumbres y pasta"
+    ],
+    "epi": [
+      "Calzado S3 de seguridad",
+      "Chaleco reflectante Clase 2",
+      "Guantes de precisión"
+    ],
+    "certificaciones": [
+      "Voice-Picking SGA",
+      "Control de Calidad en Preparación"
+    ],
+    "antiguedadAnios": 4,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 14,
+      "diasPendientes": 16,
+      "proximoPeriodo": "16 al 30 de Septiembre",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Sábado",
+      "descripcion": "2 días a la semana: Domingos fijos + Sábado rotativo"
+    }
+  },
+  {
+    "_id": "OP-107",
+    "name": "Óscar Vidal",
+    "department": "preparacion",
+    "departmentLabel": "Preparación",
+    "role": "Preparador de pedidos (Voice-Picking)",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Picking en seco (nivel 0 de estanterías, pasillos de Desayuno, Café, Cereales y Galletas)",
+    "machineId": "P-07",
+    "machineKind": "recogepedidos",
+    "machineModel": "Recogepedidos Jungheinrich ECD 320",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "Desayuno y cafe"
+    ],
+    "epi": [
+      "Calzado S3 de seguridad",
+      "Chaleco reflectante Clase 2",
+      "Guantes de agarre"
+    ],
+    "certificaciones": [
+      "Voice-Picking SGA"
+    ],
+    "antiguedadAnios": 1,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 10,
+      "diasPendientes": 20,
+      "proximoPeriodo": "1 al 15 de Octubre",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Miércoles",
+      "descripcion": "2 días a la semana: Domingos fijos + Miércoles rotativo"
+    }
+  },
+  {
+    "_id": "OP-108",
+    "name": "Marta Ruiz",
+    "department": "preparacion",
+    "departmentLabel": "Preparación",
+    "role": "Preparadora de pedidos (Voice-Picking)",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Picking en seco (nivel 0 de estanterías, pasillos de Snacks, Chocolates y Golosinas)",
+    "machineId": "P-08",
+    "machineKind": "recogepedidos",
+    "machineModel": "Recogepedidos Jungheinrich ECD 320",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "Snacks y dulces"
+    ],
+    "epi": [
+      "Calzado S3 de seguridad",
+      "Chaleco reflectante Clase 2",
+      "Guantes de agarre"
+    ],
+    "certificaciones": [
+      "Voice-Picking SGA"
+    ],
+    "antiguedadAnios": 3,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 15,
+      "diasPendientes": 15,
+      "proximoPeriodo": "16 al 31 de Julio",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Jueves",
+      "descripcion": "2 días a la semana: Domingos fijos + Jueves rotativo"
+    }
+  },
+  {
+    "_id": "OP-109",
+    "name": "David Gil",
+    "department": "preparacion",
+    "departmentLabel": "Preparación",
+    "role": "Preparador de pedidos (Voice-Picking)",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Picking en seco (nivel 0 de estanterías, pasillos de Droguería y Limpieza Esselt/Tandil)",
+    "machineId": "P-09",
+    "machineKind": "recogepedidos",
+    "machineModel": "Recogepedidos Jungheinrich ECD 320",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "Limpieza y hogar"
+    ],
+    "epi": [
+      "Calzado S3 de seguridad",
+      "Chaleco reflectante Clase 2",
+      "Guantes de nitrilo reforzado"
+    ],
+    "certificaciones": [
+      "Voice-Picking SGA",
+      "Manipulación de Productos Químicos Domésticos"
+    ],
+    "antiguedadAnios": 6,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 18,
+      "diasPendientes": 12,
+      "proximoPeriodo": "1 al 15 de Agosto",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Lunes",
+      "descripcion": "2 días a la semana: Domingos fijos + Lunes rotativo"
+    }
+  },
+  {
+    "_id": "OP-110",
+    "name": "Nuria Campos",
+    "department": "preparacion",
+    "departmentLabel": "Preparación",
+    "role": "Preparadora de pedidos (Voice-Picking)",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Picking en seco (nivel 0 de estanterías, pasillos de Higiene Personal Biocura/Lacura)",
+    "machineId": "P-10",
+    "machineKind": "recogepedidos",
+    "machineModel": "Recogepedidos Jungheinrich ECD 320",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "Higiene y cuidado"
+    ],
+    "epi": [
+      "Calzado S3 de seguridad",
+      "Chaleco reflectante Clase 2",
+      "Guantes de precisión"
+    ],
+    "certificaciones": [
+      "Voice-Picking SGA"
+    ],
+    "antiguedadAnios": 2,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 12,
+      "diasPendientes": 18,
+      "proximoPeriodo": "16 al 31 de Agosto",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Martes",
+      "descripcion": "2 días a la semana: Domingos fijos + Martes rotativo"
+    }
+  },
+  {
+    "_id": "OP-111",
+    "name": "Javier Pérez",
+    "department": "preparacion",
+    "departmentLabel": "Preparación",
+    "role": "Preparador de pedidos (Voice-Picking)",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Picking en seco (nivel 0 de estanterías, pasillos de Panadería seca El Horno y Bazar ALDI Deals)",
+    "machineId": "P-11",
+    "machineKind": "recogepedidos",
+    "machineModel": "Recogepedidos Jungheinrich ECD 320",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "Panaderia y bazar"
+    ],
+    "epi": [
+      "Calzado S3 de seguridad",
+      "Chaleco reflectante Clase 2",
+      "Guantes de agarre"
+    ],
+    "certificaciones": [
+      "Voice-Picking SGA"
+    ],
+    "antiguedadAnios": 4,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 15,
+      "diasPendientes": 15,
+      "proximoPeriodo": "1 al 15 de Septiembre",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Viernes",
+      "descripcion": "2 días a la semana: Domingos fijos + Viernes rotativo"
+    }
+  },
+  {
+    "_id": "OP-112",
+    "name": "Carlos Moreno",
+    "department": "preparacion",
+    "departmentLabel": "Preparación",
+    "role": "Preparador de pedidos (Voice-Picking)",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Picking en seco (nivel 0 de estanterías, pasillos de Conservas de pescado y Platos preparados)",
+    "machineId": "P-12",
+    "machineKind": "recogepedidos",
+    "machineModel": "Recogepedidos Jungheinrich ECD 320",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "Conservas"
+    ],
+    "epi": [
+      "Calzado S3 de seguridad",
+      "Chaleco reflectante Clase 2",
+      "Guantes de precisión"
+    ],
+    "certificaciones": [
+      "Voice-Picking SGA",
+      "Tutor de Nuevas Incorporaciones"
+    ],
+    "antiguedadAnios": 5,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 16,
+      "diasPendientes": 14,
+      "proximoPeriodo": "1 al 15 de Julio",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Sábado",
+      "descripcion": "2 días a la semana: Domingos fijos + Sábado rotativo"
+    }
+  },
+  {
+    "_id": "OP-201",
+    "name": "Lucía Santos",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillera retráctil de estanterías",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Subir o bajar mercancía de los racks (ubicación de palets en altura niveles 1-5 y reposición a nivel 0)",
+    "machineId": "R-01",
+    "machineKind": "retractil",
+    "machineModel": "Retráctil Jungheinrich ETV 216",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "seco"
+    ],
+    "epi": [
+      "Calzado S3 con puntera de acero",
+      "Chaleco reflectante Clase 2",
+      "Casco de protección homologado"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451 Tipo 2 (Retráctil)",
+      "Mástil Gran Altura (11,5 m)"
+    ],
+    "antiguedadAnios": 7,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 18,
+      "diasPendientes": 12,
+      "proximoPeriodo": "1 al 15 de Agosto",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Miércoles",
+      "descripcion": "2 días a la semana: Domingos fijos + Miércoles rotativo"
+    }
+  },
+  {
+    "_id": "OP-202",
+    "name": "Marcos Benítez",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillero retráctil de estanterías",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Subir o bajar mercancía de los racks (ubicación de palets en altura niveles 1-5 y reposición a nivel 0)",
+    "machineId": "R-02",
+    "machineKind": "retractil",
+    "machineModel": "Retráctil Jungheinrich ETV 216",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "seco"
+    ],
+    "epi": [
+      "Calzado S3 con puntera de acero",
+      "Chaleco reflectante Clase 2",
+      "Casco de protección"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451",
+      "Seguridad en Pasillos Estrechos"
+    ],
+    "antiguedadAnios": 4,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 14,
+      "diasPendientes": 16,
+      "proximoPeriodo": "16 al 31 de Agosto",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Jueves",
+      "descripcion": "2 días a la semana: Domingos fijos + Jueves rotativo"
+    }
+  },
+  {
+    "_id": "OP-203",
+    "name": "Adrián Soler",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillero retráctil de estanterías",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Subir o bajar mercancía de los racks (ubicación de palets en altura niveles 1-5 y reposición a nivel 0)",
+    "machineId": "R-03",
+    "machineKind": "retractil",
+    "machineModel": "Retráctil Jungheinrich ETV 216",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "seco"
+    ],
+    "epi": [
+      "Calzado S3",
+      "Chaleco reflectante",
+      "Casco"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451"
+    ],
+    "antiguedadAnios": 3,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 12,
+      "diasPendientes": 18,
+      "proximoPeriodo": "1 al 15 de Septiembre",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Lunes",
+      "descripcion": "2 días a la semana: Domingos fijos + Lunes rotativo"
+    }
+  },
+  {
+    "_id": "OP-204",
+    "name": "Beatriz Molina",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillera retráctil de estanterías",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Subir o bajar mercancía de los racks (ubicación de palets en altura niveles 1-5 y reposición a nivel 0)",
+    "machineId": "R-04",
+    "machineKind": "retractil",
+    "machineModel": "Retráctil Jungheinrich ETV 216",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "seco"
+    ],
+    "epi": [
+      "Calzado S3",
+      "Chaleco reflectante",
+      "Casco"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451"
+    ],
+    "antiguedadAnios": 5,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 15,
+      "diasPendientes": 15,
+      "proximoPeriodo": "16 al 31 de Julio",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Martes",
+      "descripcion": "2 días a la semana: Domingos fijos + Martes rotativo"
+    }
+  },
+  {
+    "_id": "OP-205",
+    "name": "Hugo Garrido",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillero retráctil de estanterías",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Subir o bajar mercancía de los racks (ubicación de palets en altura niveles 1-5 y reposición a nivel 0)",
+    "machineId": "R-05",
+    "machineKind": "retractil",
+    "machineModel": "Retráctil Jungheinrich ETV 216",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "seco"
+    ],
+    "epi": [
+      "Calzado S3",
+      "Chaleco reflectante",
+      "Casco"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451"
+    ],
+    "antiguedadAnios": 2,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 10,
+      "diasPendientes": 20,
+      "proximoPeriodo": "1 al 15 de Octubre",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Viernes",
+      "descripcion": "2 días a la semana: Domingos fijos + Viernes rotativo"
+    }
+  },
+  {
+    "_id": "OP-206",
+    "name": "Carmen Delgado",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillera retráctil de estanterías",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Subir o bajar mercancía de los racks (ubicación de palets en altura niveles 1-5 y reposición a nivel 0)",
+    "machineId": "R-06",
+    "machineKind": "retractil",
+    "machineModel": "Retráctil Jungheinrich ETV 216",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "seco"
+    ],
+    "epi": [
+      "Calzado S3",
+      "Chaleco reflectante",
+      "Casco"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451"
+    ],
+    "antiguedadAnios": 6,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 16,
+      "diasPendientes": 14,
+      "proximoPeriodo": "1 al 15 de Julio",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Sábado",
+      "descripcion": "2 días a la semana: Domingos fijos + Sábado rotativo"
+    }
+  },
+  {
+    "_id": "OP-207",
+    "name": "Jorge Morales",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillero retráctil de estanterías",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Subir o bajar mercancía de los racks (ubicación de palets en altura niveles 1-5 y reposición a nivel 0)",
+    "machineId": "R-07",
+    "machineKind": "retractil",
+    "machineModel": "Retráctil Jungheinrich ETV 216",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "seco"
+    ],
+    "epi": [
+      "Calzado S3",
+      "Chaleco reflectante",
+      "Casco"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451"
+    ],
+    "antiguedadAnios": 4,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 14,
+      "diasPendientes": 16,
+      "proximoPeriodo": "16 al 31 de Agosto",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Miércoles",
+      "descripcion": "2 días a la semana: Domingos fijos + Miércoles rotativo"
+    }
+  },
+  {
+    "_id": "OP-208",
+    "name": "Patricia Sanz",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillera retráctil de estanterías",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Subir o bajar mercancía de los racks (ubicación de palets en altura niveles 1-5 y reposición a nivel 0)",
+    "machineId": "R-08",
+    "machineKind": "retractil",
+    "machineModel": "Retráctil Jungheinrich ETV 216",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "seco"
+    ],
+    "epi": [
+      "Calzado S3",
+      "Chaleco reflectante",
+      "Casco"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451"
+    ],
+    "antiguedadAnios": 3,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 12,
+      "diasPendientes": 18,
+      "proximoPeriodo": "1 al 15 de Septiembre",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Jueves",
+      "descripcion": "2 días a la semana: Domingos fijos + Jueves rotativo"
+    }
+  },
+  {
+    "_id": "OP-209",
+    "name": "Rubén Castillo",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillero retráctil de estanterías",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Subir o bajar mercancía de los racks (ubicación de palets en altura niveles 1-5 y reposición a nivel 0)",
+    "machineId": "R-09",
+    "machineKind": "retractil",
+    "machineModel": "Retráctil Jungheinrich ETV 216",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "seco"
+    ],
+    "epi": [
+      "Calzado S3",
+      "Chaleco reflectante",
+      "Casco"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451"
+    ],
+    "antiguedadAnios": 5,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 15,
+      "diasPendientes": 15,
+      "proximoPeriodo": "1 al 15 de Agosto",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Lunes",
+      "descripcion": "2 días a la semana: Domingos fijos + Lunes rotativo"
+    }
+  },
+  {
+    "_id": "OP-210",
+    "name": "Silvia Ibáñez",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillera retráctil cámara de frío",
+    "assignedZone": "frio",
+    "assignedZoneLabel": "Frío",
+    "todayTask": "Subir o bajar mercancía de los racks en frío (+2ºC) (ubicación en altura y reposición de lácteos y refrigerados)",
+    "machineId": "R-10",
+    "machineKind": "retractil",
+    "machineModel": "Retráctil Jungheinrich ETV 216 Coldstore",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "frio"
+    ],
+    "epi": [
+      "Calzado S3 térmico",
+      "Chaleco reflectante",
+      "Ropa térmica EN 342 (+2ºC)",
+      "Casco con orejeras térmicas"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451",
+      "Conducción en Cámaras Frigoríficas"
+    ],
+    "antiguedadAnios": 6,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 16,
+      "diasPendientes": 14,
+      "proximoPeriodo": "16 al 31 de Julio",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Martes",
+      "descripcion": "2 días a la semana: Domingos fijos + Martes rotativo"
+    }
+  },
+  {
+    "_id": "OP-211",
+    "name": "Daniel Cano",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillero retráctil cámara de frío",
+    "assignedZone": "frio",
+    "assignedZoneLabel": "Frío",
+    "todayTask": "Subir o bajar mercancía de los racks en frío (+2ºC) (ubicación en altura y reposición de carnes y charcutería)",
+    "machineId": "R-11",
+    "machineKind": "retractil",
+    "machineModel": "Retráctil Jungheinrich ETV 216 Coldstore",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "frio"
+    ],
+    "epi": [
+      "Calzado S3 térmico",
+      "Chaleco reflectante",
+      "Ropa térmica EN 342 (+2ºC)",
+      "Casco"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451"
+    ],
+    "antiguedadAnios": 4,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 14,
+      "diasPendientes": 16,
+      "proximoPeriodo": "1 al 15 de Agosto",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Viernes",
+      "descripcion": "2 días a la semana: Domingos fijos + Viernes rotativo"
+    }
+  },
+  {
+    "_id": "OP-212",
+    "name": "Natalia Ramos",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillera retráctil cámara de frío",
+    "assignedZone": "frio",
+    "assignedZoneLabel": "Frío",
+    "todayTask": "Subir o bajar mercancía de los racks en frío (+2ºC) (ubicación y reposición en cámara de Frutas & Verduras)",
+    "machineId": "R-12",
+    "machineKind": "retractil",
+    "machineModel": "Retráctil Jungheinrich ETV 216 Coldstore",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "frio"
+    ],
+    "epi": [
+      "Calzado S3 térmico",
+      "Chaleco reflectante",
+      "Ropa térmica EN 342 (+2ºC)",
+      "Casco"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451"
+    ],
+    "antiguedadAnios": 5,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 15,
+      "diasPendientes": 15,
+      "proximoPeriodo": "16 al 31 de Agosto",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Sábado",
+      "descripcion": "2 días a la semana: Domingos fijos + Sábado rotativo"
+    }
+  },
+  {
+    "_id": "OP-213",
+    "name": "Iván Romero",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillero retráctil especialista ultracongelados",
+    "assignedZone": "congelado",
+    "assignedZoneLabel": "Congelado",
+    "todayTask": "Subir o bajar mercancía de los racks en congelado (-22ºC) (ubicación en altura y reposición en cámara ultrafría con cabina climatizada)",
+    "machineId": "R-13",
+    "machineKind": "retractil",
+    "machineModel": "Retráctil Jungheinrich ETV 216 Cabina Frío Extremo (-30ºC)",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "congelado"
+    ],
+    "epi": [
+      "Traje frigorífico nivel 3 (-30ºC EN 342)",
+      "Calzado S3 criogénico",
+      "Guantes térmicos",
+      "Casco con barboquejo"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451",
+      "Seguridad en Ambientes de Congelación Severa"
+    ],
+    "antiguedadAnios": 8,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 18,
+      "diasPendientes": 12,
+      "proximoPeriodo": "1 al 15 de Julio",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Miércoles",
+      "descripcion": "2 días a la semana: Domingos fijos + Miércoles rotativo"
+    }
+  },
+  {
+    "_id": "OP-214",
+    "name": "Paula Herrero",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillera retráctil especialista ultracongelados",
+    "assignedZone": "congelado",
+    "assignedZoneLabel": "Congelado",
+    "todayTask": "Subir o bajar mercancía de los racks en congelado (-22ºC) (ubicación en altura y reposición en cámara ultrafría)",
+    "machineId": "R-14",
+    "machineKind": "retractil",
+    "machineModel": "Retráctil Jungheinrich ETV 216 Cabina Frío Extremo (-30ºC)",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "congelado"
+    ],
+    "epi": [
+      "Traje frigorífico nivel 3 (-30ºC EN 342)",
+      "Calzado S3 criogénico",
+      "Guantes térmicos",
+      "Casco"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451",
+      "Protocolo PRL Frío Extremo"
+    ],
+    "antiguedadAnios": 6,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 15,
+      "diasPendientes": 15,
+      "proximoPeriodo": "1 al 15 de Septiembre",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Jueves",
+      "descripcion": "2 días a la semana: Domingos fijos + Jueves rotativo"
+    }
+  },
+  {
+    "_id": "OP-215",
+    "name": "Gonzalo Iglesias",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillero frontal de muelles Inbound",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Descargar camiones de proveedores en muelles Inbound (D01-D14) y traslado a playa de recepción",
+    "machineId": "F-01",
+    "machineKind": "frontal",
+    "machineModel": "Apilador Frontal Jungheinrich ERE 225i",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "muelles_inbound"
+    ],
+    "epi": [
+      "Calzado S3",
+      "Chaleco reflectante Clase 2",
+      "Guantes de agarre"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451 Tipo 1 (Frontal/Apilador)",
+      "Seguridad en Muelles y Rampas"
+    ],
+    "antiguedadAnios": 5,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 15,
+      "diasPendientes": 15,
+      "proximoPeriodo": "16 al 31 de Julio",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Lunes",
+      "descripcion": "2 días a la semana: Domingos fijos + Lunes rotativo"
+    }
+  },
+  {
+    "_id": "OP-216",
+    "name": "Miriam Lorenzo",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillera frontal de muelles Inbound",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Descargar camiones de proveedores en muelles Inbound (D01-D14) y cotejo de albaranes",
+    "machineId": "F-02",
+    "machineKind": "frontal",
+    "machineModel": "Apilador Frontal Jungheinrich ERE 225i",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "muelles_inbound"
+    ],
+    "epi": [
+      "Calzado S3",
+      "Chaleco reflectante",
+      "Guantes de agarre"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451",
+      "Gestión de Albaranes WMS"
+    ],
+    "antiguedadAnios": 3,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 12,
+      "diasPendientes": 18,
+      "proximoPeriodo": "1 al 15 de Agosto",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Martes",
+      "descripcion": "2 días a la semana: Domingos fijos + Martes rotativo"
+    }
+  },
+  {
+    "_id": "OP-217",
+    "name": "Víctor Montero",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillero frontal de muelles Inbound",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Descargar camiones de proveedores en muelles Inbound (D01-D14) y posicionamiento en pulmón de recepción",
+    "machineId": "F-03",
+    "machineKind": "frontal",
+    "machineModel": "Apilador Frontal Jungheinrich ERE 225i",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "muelles_inbound"
+    ],
+    "epi": [
+      "Calzado S3",
+      "Chaleco reflectante",
+      "Guantes de agarre"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451"
+    ],
+    "antiguedadAnios": 4,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 14,
+      "diasPendientes": 16,
+      "proximoPeriodo": "16 al 31 de Agosto",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Miércoles",
+      "descripcion": "2 días a la semana: Domingos fijos + Miércoles rotativo"
+    }
+  },
+  {
+    "_id": "OP-218",
+    "name": "Lorena Fuentes",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillera frontal de muelles Inbound",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Descargar camiones de proveedores en muelles Inbound (D01-D14) y traslado a zona de inspección",
+    "machineId": "F-04",
+    "machineKind": "frontal",
+    "machineModel": "Apilador Frontal Jungheinrich ERE 225i",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "muelles_inbound"
+    ],
+    "epi": [
+      "Calzado S3",
+      "Chaleco reflectante",
+      "Guantes de agarre"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451"
+    ],
+    "antiguedadAnios": 2,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 10,
+      "diasPendientes": 20,
+      "proximoPeriodo": "1 al 15 de Septiembre",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Jueves",
+      "descripcion": "2 días a la semana: Domingos fijos + Jueves rotativo"
+    }
+  },
+  {
+    "_id": "OP-219",
+    "name": "Fernando Méndez",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillero frontal de muelles Inbound",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Descargar camiones de proveedores en muelles Inbound (D01-D14) y verificación de palets estándar",
+    "machineId": "F-05",
+    "machineKind": "frontal",
+    "machineModel": "Apilador Frontal Jungheinrich ERE 225i",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "muelles_inbound"
+    ],
+    "epi": [
+      "Calzado S3",
+      "Chaleco reflectante",
+      "Guantes de agarre"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451"
+    ],
+    "antiguedadAnios": 6,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 16,
+      "diasPendientes": 14,
+      "proximoPeriodo": "1 al 15 de Julio",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Viernes",
+      "descripcion": "2 días a la semana: Domingos fijos + Viernes rotativo"
+    }
+  },
+  {
+    "_id": "OP-220",
+    "name": "Alba Pascual",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillera frontal de muelles Inbound",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Descargar camiones de proveedores en muelles Inbound (D01-D14) y clasificación rápida",
+    "machineId": "F-06",
+    "machineKind": "frontal",
+    "machineModel": "Apilador Frontal Jungheinrich ERE 225i",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "muelles_inbound"
+    ],
+    "epi": [
+      "Calzado S3",
+      "Chaleco reflectante",
+      "Guantes de agarre"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451"
+    ],
+    "antiguedadAnios": 3,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 12,
+      "diasPendientes": 18,
+      "proximoPeriodo": "1 al 15 de Octubre",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Sábado",
+      "descripcion": "2 días a la semana: Domingos fijos + Sábado rotativo"
+    }
+  },
+  {
+    "_id": "OP-221",
+    "name": "Manuel Rivas",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillero frontal de muelles Frío",
+    "assignedZone": "frio",
+    "assignedZoneLabel": "Frío",
+    "todayTask": "Descargar camiones refrigerados en muelles D45-D54 y verificación de temperatura en termógrafo (<4ºC)",
+    "machineId": "F-07",
+    "machineKind": "frontal",
+    "machineModel": "Apilador Frontal Jungheinrich ERE 225i Coldstore",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "muelles_frio"
+    ],
+    "epi": [
+      "Calzado S3 térmico",
+      "Chaleco reflectante",
+      "Ropa térmica EN 342",
+      "Guantes aislantes"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451",
+      "Protocolo APPCC de Cadena de Frío"
+    ],
+    "antiguedadAnios": 7,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 18,
+      "diasPendientes": 12,
+      "proximoPeriodo": "1 al 15 de Agosto",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Lunes",
+      "descripcion": "2 días a la semana: Domingos fijos + Lunes rotativo"
+    }
+  },
+  {
+    "_id": "OP-222",
+    "name": "Cristina Ortiz",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillera frontal de muelles Frío",
+    "assignedZone": "frio",
+    "assignedZoneLabel": "Frío",
+    "todayTask": "Descargar camiones refrigerados en muelles D45-D54 y traslado exprés a cámara de Frutas & Verduras",
+    "machineId": "F-08",
+    "machineKind": "frontal",
+    "machineModel": "Apilador Frontal Jungheinrich ERE 225i Coldstore",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "muelles_frio"
+    ],
+    "epi": [
+      "Calzado S3 térmico",
+      "Chaleco reflectante",
+      "Ropa térmica EN 342"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451"
+    ],
+    "antiguedadAnios": 4,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 14,
+      "diasPendientes": 16,
+      "proximoPeriodo": "16 al 31 de Agosto",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Martes",
+      "descripcion": "2 días a la semana: Domingos fijos + Martes rotativo"
+    }
+  },
+  {
+    "_id": "OP-223",
+    "name": "Guillermo Cruz",
+    "department": "recepcion",
+    "departmentLabel": "Recepción",
+    "role": "Carretillero frontal de muelles Congelado",
+    "assignedZone": "congelado",
+    "assignedZoneLabel": "Congelado",
+    "todayTask": "Descargar camiones ultracongelados en muelles D55-D60 con control estricto de termógrafo (<-18ºC) e introducción a esclusa",
+    "machineId": "F-09",
+    "machineKind": "frontal",
+    "machineModel": "Apilador Frontal Jungheinrich ERE 225i Coldstore",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "muelles_congelado"
+    ],
+    "epi": [
+      "Traje frigorífico nivel 3 (-30ºC)",
+      "Calzado S3 criogénico",
+      "Chaleco reflectante",
+      "Guantes térmicos"
+    ],
+    "certificaciones": [
+      "Carnet Carretillas UNE 58451",
+      "Control Crítico Ultracongelados APPCC"
+    ],
+    "antiguedadAnios": 5,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 15,
+      "diasPendientes": 15,
+      "proximoPeriodo": "1 al 15 de Julio",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Miércoles",
+      "descripcion": "2 días a la semana: Domingos fijos + Miércoles rotativo"
+    }
+  },
+  {
+    "_id": "OP-301",
+    "name": "Samuel Vargas",
+    "department": "expedicion",
+    "departmentLabel": "Expedición",
+    "role": "Conductor de transpaleta eléctrica de expedición",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Traslado de palés flejados desde el tren de flejado a muelles de salida (D15-D44) para rutas de tiendas",
+    "machineId": "E-01",
+    "machineKind": "transpaleta",
+    "machineModel": "Transpaleta Eléctrica Jungheinrich ESE 220",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "expedicion_seco"
+    ],
+    "epi": [
+      "Calzado S3 de seguridad",
+      "Chaleco reflectante Clase 2",
+      "Guantes de agarre"
+    ],
+    "certificaciones": [
+      "Carnet Transpaleta Eléctrica UNE 58451",
+      "Organización de Playas de Carga"
+    ],
+    "antiguedadAnios": 4,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 14,
+      "diasPendientes": 16,
+      "proximoPeriodo": "16 al 31 de Julio",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Jueves",
+      "descripcion": "2 días a la semana: Domingos fijos + Jueves rotativo"
+    }
+  },
+  {
+    "_id": "OP-302",
+    "name": "Clara Navarro",
+    "department": "expedicion",
+    "departmentLabel": "Expedición",
+    "role": "Conductora de transpaleta eléctrica de expedición",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Traslado de palés flejados desde el tren de flejado a muelles de salida (D15-D44) y consolidación de rutas de Madrid",
+    "machineId": "E-02",
+    "machineKind": "transpaleta",
+    "machineModel": "Transpaleta Eléctrica Jungheinrich ESE 220",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "expedicion_seco"
+    ],
+    "epi": [
+      "Calzado S3 de seguridad",
+      "Chaleco reflectante Clase 2",
+      "Guantes de agarre"
+    ],
+    "certificaciones": [
+      "Carnet Transpaleta Eléctrica UNE 58451"
+    ],
+    "antiguedadAnios": 3,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 12,
+      "diasPendientes": 18,
+      "proximoPeriodo": "1 al 15 de Agosto",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Viernes",
+      "descripcion": "2 días a la semana: Domingos fijos + Viernes rotativo"
+    }
+  },
+  {
+    "_id": "OP-303",
+    "name": "Antonio Lozano",
+    "department": "expedicion",
+    "departmentLabel": "Expedición",
+    "role": "Conductor de transpaleta eléctrica de expedición",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Traslado de palés flejados hacia muelles de salida (D15-D44) y ordenación de precarga para Toledo y Talavera",
+    "machineId": "E-03",
+    "machineKind": "transpaleta",
+    "machineModel": "Transpaleta Eléctrica Jungheinrich ESE 220",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "expedicion_seco"
+    ],
+    "epi": [
+      "Calzado S3",
+      "Chaleco reflectante",
+      "Guantes de agarre"
+    ],
+    "certificaciones": [
+      "Carnet Transpaleta Eléctrica UNE 58451"
+    ],
+    "antiguedadAnios": 5,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 15,
+      "diasPendientes": 15,
+      "proximoPeriodo": "16 al 31 de Agosto",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Sábado",
+      "descripcion": "2 días a la semana: Domingos fijos + Sábado rotativo"
+    }
+  },
+  {
+    "_id": "OP-304",
+    "name": "Isabel Gallego",
+    "department": "expedicion",
+    "departmentLabel": "Expedición",
+    "role": "Conductora de transpaleta eléctrica de expedición",
+    "assignedZone": "seco",
+    "assignedZoneLabel": "Seco",
+    "todayTask": "Traslado de palés flejados hacia muelles de salida (D15-D44) y precarga de rutas lejanas (Ávila y Segovia)",
+    "machineId": "E-04",
+    "machineKind": "transpaleta",
+    "machineModel": "Transpaleta Eléctrica Jungheinrich ESE 220",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "expedicion_seco"
+    ],
+    "epi": [
+      "Calzado S3",
+      "Chaleco reflectante",
+      "Guantes de agarre"
+    ],
+    "certificaciones": [
+      "Carnet Transpaleta Eléctrica UNE 58451"
+    ],
+    "antiguedadAnios": 2,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 10,
+      "diasPendientes": 20,
+      "proximoPeriodo": "1 al 15 de Septiembre",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Lunes",
+      "descripcion": "2 días a la semana: Domingos fijos + Lunes rotativo"
+    }
+  },
+  {
+    "_id": "OP-305",
+    "name": "Pablo Serrano",
+    "department": "expedicion",
+    "departmentLabel": "Expedición",
+    "role": "Conductor de transpaleta eléctrica Frío / Consolidación",
+    "assignedZone": "frio",
+    "assignedZoneLabel": "Frío",
+    "todayTask": "Traslado de palés refrigerados flejados a playa de consolidación multitemperatura y muelles D45-D54",
+    "machineId": "E-05",
+    "machineKind": "transpaleta",
+    "machineModel": "Transpaleta Eléctrica Jungheinrich ESE 220 Coldstore",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "expedicion_frio"
+    ],
+    "epi": [
+      "Calzado S3 térmico",
+      "Chaleco reflectante",
+      "Ropa térmica EN 342 (+2ºC)"
+    ],
+    "certificaciones": [
+      "Carnet Transpaleta Eléctrica UNE 58451",
+      "Cadena de Frío en Muelles"
+    ],
+    "antiguedadAnios": 6,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 16,
+      "diasPendientes": 14,
+      "proximoPeriodo": "1 al 15 de Julio",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Martes",
+      "descripcion": "2 días a la semana: Domingos fijos + Martes rotativo"
+    }
+  },
+  {
+    "_id": "OP-306",
+    "name": "Teresa Domínguez",
+    "department": "expedicion",
+    "departmentLabel": "Expedición",
+    "role": "Conductora de transpaleta eléctrica Congelado / Salida",
+    "assignedZone": "congelado",
+    "assignedZoneLabel": "Congelado",
+    "todayTask": "Traslado exprés de palés de congelado desde playa de expedición hacia semirremolques bitemperatura",
+    "machineId": "E-06",
+    "machineKind": "transpaleta",
+    "machineModel": "Transpaleta Eléctrica Jungheinrich ESE 220 Coldstore",
+    "shift": "Turno Mañana (06:00 - 14:30)",
+    "sections": [
+      "expedicion_congelado"
+    ],
+    "epi": [
+      "Traje frigorífico nivel 3 (-30ºC)",
+      "Calzado S3 criogénico",
+      "Chaleco reflectante",
+      "Guantes térmicos"
+    ],
+    "certificaciones": [
+      "Carnet Transpaleta Eléctrica UNE 58451",
+      "Protocolo Frío Extremo"
+    ],
+    "antiguedadAnios": 4,
+    "vacaciones": {
+      "diasAnuales": 30,
+      "diasDisfrutados": 14,
+      "diasPendientes": 16,
+      "proximoPeriodo": "1 al 15 de Agosto",
+      "estado": "planificadas"
+    },
+    "descansoSemanal": {
+      "totalDiasLibresSemana": 2,
+      "diaFijo": "Domingo",
+      "diaRotativoSemana": "Miércoles",
+      "descripcion": "2 días a la semana: Domingos fijos + Miércoles rotativo"
+    }
+  }
+]

@@ -21,7 +21,7 @@ Idioma del producto y del código de cara al usuario: **español**. El usuario (
 
 | Dato | Valor | Nota |
 |---|---|---|
-| Superficie de la nave en Pinto | **~40.000 m²** (tras ampliar +9.000 m²) | Usar este valor |
+| Superficie de la nave en Pinto | **50.895 m²** (261 × 195 m; tras ampliar +9.000 m²) | Usar este valor |
 | 248.000 m² | Suelo logístico **sumado por toda la red de Aldi España** | **No** es Pinto; no usarlo como tamaño de la nave |
 | Provincias servidas | Madrid, Toledo, Segovia, Ávila, Guadalajara, Ciudad Real, Cáceres, Salamanca | 8 provincias |
 | Otros | Iluminación LED, BMS, objetivo BREEAM "Excelente" | Útil para la base de conocimiento del RAG |
@@ -32,7 +32,7 @@ Fuentes: alcabodelacalle.es/economia/aldi-amplia-su-centro-logistico-en-pinto/ �
 
 ### Decisiones tomadas por Jean
 
-1. Parcela grande con viales y aparcamientos, **nave de ~40.000 m²**.
+1. Parcela grande con viales y aparcamientos, **nave de 50.895 m²**.
 2. 8 provincias (tabla de arriba).
 3. IA: **Google Gemini**, con la misma API key que Jean usa en su proyecto "RAG Atlas". Las llamadas a Gemini se hacen **en el servidor de Next.js** (route handlers). La clave **nunca** va al navegador. No leas `.env` de otros proyectos: Jean pone la clave en `.env.local` y en las variables de Vercel.
 4. "GPS" dentro de una nave = **localización de interior (RTLS por UWB/BLE)**. Se simula, con una interfaz preparada para conectar datos reales.
@@ -213,40 +213,37 @@ Prepáralos ya en el Turno 1, aunque todavía no se usen:
 
 Una función pura `buildPintoLayout(): WarehouseLayout` que devuelve rectángulos y listas. **Nada de three aquí.** Cifras de partida (ajustables):
 
-**Parcela:** x −210…210, z −150…185 (≈140.000 m²). Vial perimetral de 8 m.
+**Parcela:** x −210…260, z −150…185 (≈157.450 m²). Vial perimetral de 8 m.
 
-**Nave:** x −125…125, z −80…80 → **250 × 160 m = 40.000 m²**, altura libre 13 m.
+**Nave:** x −125…136, z −115…80 → **261 × 195 m = 50.895 m²**, altura libre 13 m.
 
 | Zona | Rectángulo (x, z) | m² | Temperatura | Almacenaje |
 |---|---|---|---|---|
-| Seco | −125…30, −80…50 | 20.150 | 16–22 ºC | Estantería convencional de 7 niveles (11,6 m) |
-| Carga de baterías (dentro de Seco) | −125…−105, −80…−40 | 800 | — | Cargadores y aparcamiento de máquinas |
-| Frío | 30…125, −80…−25 | 5.225 | +2/+4 ºC | Estantería de 5 niveles |
-| Frutas y verduras (FyV) | 30…70, −25…50 | 3.000 | +6 ºC, 85–90 % HR | **Palets en el suelo** en calles, sin estanterías |
-| Congelado | 70…125, −25…50 | 4.125 | −22/−25 ºC | Estantería de 6 niveles, con antecámara |
-| Expedición / consolidación | −125…125, 50…80 | 7.500 | según el muelle | Calles de pre-carga pintadas en el suelo, una por muelle |
+| Seco | −125…30, −115…50 | 25.575 | 16–22 ºC | Estantería convencional de 3 niveles de palé (1,8 m por nivel, 5,4 m) |
+| Sala de carga (dentro de Seco) | −125…−105, −115…−93 | 440 | — | Cargadores y aparcamiento de máquinas |
+| Frío | 30…104, −115…−25 | 6.660 | +2/+4 ºC | Estantería de 3 niveles de palé |
+| Flejado y consolidación de seco (antigua FyV) | 30…70, −25…50 | 3.000 | 16–22 ºC | Trenes de flejado y playa de consolidación, sin estanterías |
+| Congelado | 70…104, −25…43 | 2.312 | −22/−25 ºC | Estantería de 3 niveles de palé, con antecámara |
+| Expedición / consolidación | −125…136, 50…80 | 7.830 | según el muelle | Calles de pre-carga pintadas en el suelo, una por muelle |
 
 **Estanterías** (zonas Seco, Frío y Congelado):
 - Pasillos **norte-sur** (perpendiculares a los muelles), de 3,2 m de ancho (pasillo de retráctil).
 - Paso de doble fila: `rack 1,1 + hueco 0,2 + rack 1,1 + pasillo 3,2 = 5,6 m`.
-- Módulo de 2,7 m de frente (3 palets europeos de 0,8 m de ancho). Niveles cada 1,6 m.
-- **Pasillos transversales** de 4 m cada ~40 m (en Seco: tramos z −76…−36, −32…4 y 8…44).
+- Módulo de 2,7 m de frente (3 palets europeos de 0,8 m de ancho). 3 niveles de palé a 1,8 m (cotas 0, 1,8 y 3,6 m; 5,4 m de estantería).
+- **Pasillos transversales** de 4 m cada ~40 m (las cotas z exactas salen del layout).
 - **Nivel 0 = picking** (el modelo de ALDI: pocos artículos, picking a palet completo en el suelo) y niveles 1+ = reserva.
 - Código de ubicación: `{zona}-{pasillo:2}-{módulo:2}-{nivel}-{hueco}`, por ejemplo `S-07-12-3-B`.
-- Orden de magnitud esperado: **~40.000 ubicaciones de palet** en total. Calcúlalo y muéstralo.
+- Orden de magnitud esperado: **~17.600 ubicaciones de palet** en total (17.640 en el layout actual). Calcúlalo y muéstralo.
 
-**Muelles:** en la fachada sur (z = 80), de x −120 a 120, cada 4 m → **60 muelles** `D01…D60`.
-- D01–D14: entrada de proveedores (seco).
-- D15–D44: salida seco/multitemperatura.
-- D45–D60 (frente a frío y congelado): entrada y salida frío. `temp` según la posición.
+**Muelles:** **64 muelles** `D01…D64`: D01–D40 en la fachada sur (z = 80) y D41–D64 en la fachada este.
+- D01–D04: salida seco; D05–D18: entrada de proveedores (seco); D19–D40: salida seco.
+- D41–D50 (frío) y D51–D64 (congelado), en la fachada este: muelles mixtos (entrada y salida). `temp` según la posición.
 - Cada muelle tiene `{ id, x, kind: 'inbound'|'outbound', temp, doorWidth: 3, levelerDepth: 2.5, laneRect }`. `laneRect` es su calle de pre-carga en Expedición.
 
 **Exterior:**
 - Patio de maniobra z 80…120 (40 m), con marcas amarillas por muelle.
 - Aparcamiento de semirremolques z 130…170, plazas de 4 × 17 m (~70 plazas).
 - **Garita y báscula** en la entrada sureste (x ≈ 185, z ≈ 175), con barreras de entrada y salida.
-- Oficinas y vestuarios: edificio de 2 plantas en x −175…−135, z 10…60.
-- Aparcamiento de turismos del personal al oeste (x −205…−180).
 - Depósito contra incendios y caseta de bombas al norte. Zona de lavado de camiones opcional.
 - Puntos de recarga eléctrica de camiones (opcional, encaja con BREEAM).
 
@@ -259,7 +256,7 @@ Expórtalos en el layout. Así A* trabaja sobre datos, no sobre la malla 3D.
 #### F1.2 Construcción 3D (`src/three/builders/*.ts`)
 
 Un builder por bloque. Cada uno recibe el layout y devuelve un `THREE.Group`:
-- `build-site.ts`: terreno, viales con asfalto y marcas, aceras, aparcamientos (instanced), garita y barreras, oficinas, depósito, algo de vegetación low-poly en el perímetro.
+- `build-site.ts`: terreno, viales con asfalto y marcas, aceras, aparcamientos (instanced), garita y barreras, depósito, algo de vegetación low-poly en el perímetro.
 - `build-building.ts`: suelo de la nave con un tinte por zona (seco gris claro, frío azul pálido, congelado blanco azulado, FyV verde pálido, expedición gris con calles amarillas), muros exteriores, tabiques de las cámaras, puertas de muelle, abrigos y niveladoras.
 - `build-racks.ts`: `InstancedMesh` para puntales (gris azulado), largueros (naranja, el clásico) y palets (caja de 1,2 × h × 0,8 con `instanceColor` según la familia de producto; h variable 1,0–1,5 m). Ocupación inicial aleatoria con semilla fija (~85 %).
 - `build-labels.ts`: rótulos **pintados en el suelo** (canvas → textura en un plano): nombre de zona con temperatura y número de pasillo en cada cabecera. Sin DOM por rótulo.
@@ -295,7 +292,7 @@ No se dibuja la cubierta. Opcional: con zoom lejano, una cubierta translúcida c
 #### F1.5 UI
 
 - `src/components/viewport.tsx` (`'use client'`, cargado con `next/dynamic` y `ssr: false`): monta y desmonta `WarehouseScene` (`src/three/warehouse-scene.ts`). El renderer, el bucle, el resize y el raycast viven en la clase. React solo recibe callbacks: `onHoverZone`, `onSelect`.
-- Barra superior: marca, "Plataforma Logística Pinto", indicadores (nave de 40.000 m², nº de ubicaciones, 60 muelles) y un reloj.
+- Barra superior: marca, "Plataforma Logística Pinto", indicadores (nave de 50.895 m², nº de ubicaciones, 64 muelles) y un reloj.
 - Panel lateral: **Zonas** (al pulsar, la cámara enfoca) y **Capas** (estanterías, palets, rótulos, máquinas, camiones, exterior, sombras).
 - Botonera de cámara abajo a la derecha: rotar ⟲/⟳, zoom 1/2/3, muros y reiniciar.
 - Ficha de zona al hacer clic: superficie, temperatura objetivo, ubicaciones, ocupación y pasillos.
@@ -307,7 +304,7 @@ No se dibuja la cubierta. Opcional: con zoom lejano, una cubierta translúcida c
 
 - Se ve la parcela completa en la vista general; al acercarse se distinguen puntales, largueros y palets.
 - 4 rotaciones fluidas, 3 zooms, modos de muros y clic en zona con su ficha.
-- Superficies de la ficha coherentes con la tabla (la nave suma 40.000 m²).
+- Superficies de la ficha coherentes con la tabla (la nave suma 50.895 m²).
 - ≥ 50 fps en la vista general con las sombras desactivadas.
 - Máquinas y camiones **estáticos** colocados para validar la escala (un camión pegado a un muelle encaja con la puerta de 3 m).
 

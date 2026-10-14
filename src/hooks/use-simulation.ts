@@ -68,8 +68,23 @@ export function useSimulation(sceneRef: MutableRefObject<WarehouseScene | null>)
       restart() {
         setEpoch((e) => e + 1);
       },
+      updateStrapper(id: string, x: number, z: number) {
+        const st = deps.layout.strappers.find((s) => s.id === id);
+        if (st) {
+          const halfW = (st.rect.xMax - st.rect.xMin) / 2 || 10;
+          const halfD = (st.rect.zMax - st.rect.zMin) / 2 || 2.5;
+          st.rect.xMin = x - halfW;
+          st.rect.xMax = x + halfW;
+          st.rect.zMin = z - halfD;
+          st.rect.zMax = z + halfD;
+          st.input.x = x - halfW - 2;
+          st.input.z = z;
+          st.output.x = x + halfW + 2;
+          st.output.z = z;
+        }
+      },
     }),
-    [],
+    [deps],
   );
 
   return {

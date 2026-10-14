@@ -58,9 +58,6 @@ export const TRUCK_REVERSE_V = 1.4;
 /** Radio de giro mínimo de un tractocamión de 16,5 m. */
 export const TRUCK_MIN_RADIUS = 12.5;
 export const TRUCK_BIKE: BikeOpts = { minRadius: TRUCK_MIN_RADIUS, accel: 1.8, brake: 3.0, lookahead: 4.0 };
-/** Extremos del camión en su eje local (frente de la tractora en −Z, trasera del remolque en +Z). */
-export const TRUCK_FRONT = 7.3;
-export const TRUCK_REAR = 11.6;
 
 /**
  * Avanza un paso un vehículo tipo bicicleta hacia (tx, tz): persecución pura con curvatura limitada.

@@ -8,7 +8,7 @@ import type { Dock, DockFace } from '@/lib/layout/types';
  */
 
 /** Plano exterior de cada cara con muelles (m). */
-export const FACE_V: Record<DockFace, number> = { south: 80, east: 125 };
+export const FACE_V: Record<DockFace, number> = { south: 80, east: 136 };
 
 /** Paso entre centros de muelles contiguos (m): remolque de 2,55 m y 2,25 m libres entre remolques. */
 export const DOCK_PITCH = 4.8;
@@ -16,14 +16,14 @@ export const DOCK_PITCH = 4.8;
 /** Profundidad hacia el interior de la nave (m) de los puntos de cada calle, medida desde la fachada. */
 export const LANE_DEPTH = {
   south: { node: 20, stage: 22 },
-  east: { node: 12, stage: 12 },
+  east: { node: 20, stage: 22 },
 } as const;
 
 /** Punto interior del frente de cada muelle (nodo 'dock-<id>'). */
 export const INTERIOR_DEPTH = 2;
 
 /** Pasillo de servicio del tramo este (x = 110): une las calles en batería con el spine de z = 47. */
-export const EAST_CORRIDOR_X = FACE_V.east - 15;
+export const EAST_CORRIDOR_X = 110;
 
 /** Mitad del ancho de cada puerta (3 m). */
 export const DOOR_HALF = 1.5;

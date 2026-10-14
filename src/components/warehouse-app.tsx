@@ -1,29 +1,21 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-import { useRef, useState } from 'react';
-import { TopBar } from '@/components/top-bar';
-import { formatSimTime } from '@/lib/sim/clock';
-import { SidePanel } from '@/components/side-panel';
-import { CameraControls } from '@/components/camera-controls';
-import { ZoneCard } from '@/components/zone-card';
-import { SimControls } from '@/components/sim-controls';
-import { DockList } from '@/components/dock-list';
-import { EventFeed } from '@/components/event-feed';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
+import { AppSidebar } from '@/components/app-sidebar';
+import { AppHeader } from '@/components/app-header';
+import { WarehouseView } from '@/components/views/warehouse-view';
+import { AssistantView } from '@/components/views/assistant-view';
+import { ProfileView, type ProfileMetrics } from '@/components/views/profile-view';
+import { CURRENT_USER } from '@/data/current-user';
 import { useWarehouseScene } from '@/hooks/use-warehouse-scene';
 import { useSimulation } from '@/hooks/use-simulation';
 import { useRtls } from '@/hooks/use-rtls';
 import { useStock } from '@/hooks/use-stock';
 import { useAssistant, defaultActions } from '@/hooks/use-assistant';
-import { MachineCard } from '@/components/machine-card';
-import { EntityLabel } from '@/components/entity-label';
-import { StockPanel } from '@/components/stock-panel';
-import { ChatPanel } from '@/components/assistant/chat-panel';
-
-const Viewport = dynamic(() => import('@/components/viewport').then((m) => m.Viewport), {
-  ssr: false,
-  loading: () => <div className="flex h-full items-center justify-center text-muted">Cargando escena 3D…</div>,
-});
+import { formatSimTime } from '@/lib/sim/clock';
+import type { AppView } from '@/lib/app-view';
+import type { ZoneId } from '@/lib/types';
 
 export function WarehouseApp() {
   const w = useWarehouseScene();
@@ -31,127 +23,101 @@ export function WarehouseApp() {
   const labelRef = useRef<HTMLDivElement | null>(null);
   const rtls = useRtls(w.sceneRef, labelRef);
   const stock = useStock(w.sceneRef, sim.state);
-  const assistant = useAssistant(() => sim.state, defaultActions(w.sceneRef));
+
+  const [view, setView] = useState<AppView>('warehouse');
   const [followingId, setFollowingId] = useState<string | null>(null);
-  const selected = w.zones.find((z) => z.id === w.selectedZone) ?? null;
+  const [strappersOpen, setStrappersOpen] = useState(false);
+  const [workersOpen, setWorkersOpen] = useState(false);
+
+  const getSimSnapshot = useCallback(() => sim.state, [sim.state]);
+  const assistantActions = useMemo(() => defaultActions(w.sceneRef), [w.sceneRef]);
+  const assistant = useAssistant(getSimSnapshot, assistantActions);
 
   const handleFollow = (id: string, follow: boolean) => {
     w.sceneRef.current?.followEntity(follow ? id : null);
     setFollowingId(follow ? id : null);
   };
 
-  const indicadores = [
-    {
-      label: 'Hora sim.',
-      value: sim.state ? `${formatSimTime(sim.state.ts)} · ${sim.state.shiftId}` : '--:--:--',
-    },
-    { label: 'Nave', value: '40.000 m²' },
-    { label: 'Ubicaciones', value: w.stats.locations.toLocaleString('es-ES') },
-    {
-      label: 'Muelles',
-      value: sim.state ? `${w.stats.dockCount} · ${sim.state.dockStates.filter((d) => d.truckId).length} oc.` : String(w.stats.dockCount),
-    },
-  ];
+  const handleSelectWorker = (machineId: string) => {
+    rtls.setSelected({ kind: 'machine', id: machineId });
+    handleFollow(machineId, true);
+    setView('warehouse');
+  };
+
+  const handleSelectZone = (zoneId: ZoneId) => {
+    w.acciones.focusZone(zoneId);
+    setView('warehouse');
+  };
+
+  const metrics = useMemo<ProfileMetrics>(
+    () => ({
+      locations: w.stats.locations,
+      zones: w.zones.length,
+      dockCount: w.stats.dockCount,
+      aisles: w.stats.aisleCount,
+      machines: sim.state?.machines.length ?? 0,
+      tasks: sim.state?.tasks.length ?? 0,
+      activeDocks: sim.state ? sim.state.dockStates.filter((d) => d.truckId).length : 0,
+    }),
+    [w.stats, w.zones, sim.state],
+  );
+
+  const indicadores = useMemo(
+    () => [
+      { label: 'Nave', value: '50.895 m²' },
+      { label: 'Ubicaciones', value: w.stats.locations.toLocaleString('es-ES') },
+      {
+        label: 'Muelles',
+        value: sim.state
+          ? `${w.stats.dockCount} · ${sim.state.dockStates.filter((d) => d.truckId).length} oc.`
+          : String(w.stats.dockCount),
+      },
+      {
+        label: 'Hora sim.',
+        value: sim.state ? `${formatSimTime(sim.state.ts)} · ${sim.state.shiftId}` : '--:--:--',
+      },
+    ],
+    [sim.state, w.stats],
+  );
 
   return (
-    <div className="flex h-full flex-col">
-      <TopBar indicators={indicadores} />
-
-      <main className="relative min-h-0 flex-1 overflow-hidden bg-bg">
-        <Viewport
-          sceneRef={w.sceneRef}
-          layers={w.layers}
-          wallMode={w.wallMode}
-          onSelect={(zoneId) => w.acciones.selectZone(zoneId)}
-          onHoverZone={() => {}}
-          onSelectEntity={(kind, id) => rtls.setSelected({ kind, id })}
-          onHoverEntity={(kind, id) => rtls.setHover(kind === 'machine' || kind === 'truck' ? { kind, id } : null)}
-          onSelectStock={(selection) => stock.setSelection(selection)}
-        />
-
-        <SidePanel
-          zones={w.zones}
-          layerLabels={w.LAYERS}
-          layers={w.layers}
-          onFocusZone={(id) => w.acciones.focusZone(id)}
-          onToggleLayer={(id) => w.acciones.toggleLayer(id)}
-        />
-
-        <StockPanel
-          mode={stock.mode}
-          onMode={stock.setMode}
-          query={stock.query}
-          onQuery={stock.setQuery}
-          onSearch={stock.search}
-          selection={stock.selection}
-          onCloseSelection={() => stock.setSelection(null)}
-          alerts={stock.alerts}
-        />
-
-        {rtls.selected && sim.state ? (
-          <MachineCard
-            state={sim.state}
-            entity={rtls.selected}
-            alerts={rtls.alerts}
-            following={rtls.selected.id === followingId}
-            onFollow={handleFollow}
-            onClose={() => rtls.setSelected(null)}
-          />
-        ) : (
-          selected && sim.state && <ZoneCard zone={selected} onClose={() => w.acciones.selectZone(null)} />
-        )}
-
-        {rtls.hover && sim.state && (
-          <div
-            ref={labelRef}
-            className="absolute z-40 -translate-x-1/2"
-            style={{ display: 'none' }}
-          >
-            <EntityLabel hover={rtls.hover} state={sim.state} following={rtls.hover.id === followingId} />
-          </div>
-        )}
-
-        {sim.state && !assistant.open && (
-          <>
-            <DockList state={sim.state} />
-            <EventFeed state={sim.state} rtlsAlerts={rtls.alerts} />
-          </>
-        )}
-
-        <ChatPanel
-          open={assistant.open}
-          onToggle={() => assistant.setOpen((v) => !v)}
-          messages={assistant.messages}
-          loading={assistant.loading}
-          onSend={(t) => assistant.send(t)}
-        />
-
-        <SimControls
-          state={sim.state}
-          speed={sim.speed}
+    <SidebarProvider className="h-svh">
+      <AppSidebar view={view} onViewChange={setView} zones={w.zones} onSelectZone={handleSelectZone} />
+      <SidebarInset className="min-h-0 overflow-hidden">
+        <AppHeader
+          view={view}
+          indicators={indicadores}
+          simTs={sim.state?.ts ?? null}
+          shiftId={sim.state?.shiftId ?? null}
           running={sim.running}
-          onPlay={sim.acciones.play}
-          onPause={sim.acciones.pause}
-          onSpeed={sim.acciones.setSpeed}
-          onRestart={sim.acciones.restart}
+          onViewChange={setView}
         />
 
-        <CameraControls
-          zoomLevel={w.zoomLevel}
-          wallMode={w.wallMode}
-          onRotate={(dir) => w.acciones.rotate(dir)}
-          onZoom={(level) => w.acciones.setZoom(level)}
-          onWallMode={() => w.acciones.cycleWallMode()}
-          onReset={() => w.acciones.focusGeneral()}
-        />
-      </main>
+        {view === 'warehouse' && (
+          <WarehouseView
+            w={w}
+            sim={sim}
+            rtls={rtls}
+            stock={stock}
+            labelRef={labelRef}
+            followingId={followingId}
+            onFollow={handleFollow}
+            onSelectWorker={handleSelectWorker}
+            strappersOpen={strappersOpen}
+            onToggleStrappers={() => setStrappersOpen((v) => !v)}
+            onCloseStrappers={() => setStrappersOpen(false)}
+            workersOpen={workersOpen}
+            onToggleWorkers={() => setWorkersOpen((v) => !v)}
+            onCloseWorkers={() => setWorkersOpen(false)}
+          />
+        )}
 
-      <footer className="flex items-center gap-4 border-t border-line bg-panel px-4 py-1.5 text-[11px] text-muted">
-        <span>
-          Plataforma logística de <strong className="font-semibold text-fg">ALDI en Pinto</strong> — 8 provincias servidas
-        </span>
-        <span>Datos simulados con fines de demostración</span>
-      </footer>
-    </div>
+        {view === 'assistant' && (
+          <AssistantView messages={assistant.messages} loading={assistant.loading} onSend={assistant.send} />
+        )}
+
+        {view === 'profile' && <ProfileView user={CURRENT_USER} metrics={metrics} />}
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

@@ -6,15 +6,30 @@ import { useSyncExternalStore } from 'react';
  * Marca de tiempo actual (ms, redondeada al intervalo) o null en el render del servidor.
  * Con useSyncExternalStore el servidor y el primer render del cliente coinciden (null).
  */
-export function useNow(intervalMs = 1000): number | null {
-  return useSyncExternalStore(
-    (onChange) => {
-      const id = setInterval(onChange, intervalMs);
-      return () => clearInterval(id);
-    },
-    () => Math.floor(Date.now() / intervalMs) * intervalMs,
-    () => null,
-  );
+const listeners = new Set<() => void>();
+let timerId: ReturnType<typeof setInterval> | null = null;
+
+function subscribe(onChange: () => void) {
+  listeners.add(onChange);
+  if (!timerId) {
+    timerId = setInterval(() => {
+      for (const listener of listeners) listener();
+    }, 1000);
+  }
+  return () => {
+    listeners.delete(onChange);
+    if (listeners.size === 0 && timerId) {
+      clearInterval(timerId);
+      timerId = null;
+    }
+  };
+}
+
+const getSnapshot = () => Math.floor(Date.now() / 1000) * 1000;
+const getServerSnapshot = () => null;
+
+export function useNow(): number | null {
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
 
 export function formatClock(date: Date, withSeconds = true) {

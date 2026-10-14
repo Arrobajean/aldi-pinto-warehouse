@@ -35,7 +35,7 @@ export class SimPositionSource {
     };
   }
 
-  subscribe(cb: (sample: RtlsSample) => void): () => void {
+  runStream(cb: (sample: RtlsSample) => void): () => void {
     const tick = () => {
       const ts = this.now();
       for (const tagId of this.getTags()) {

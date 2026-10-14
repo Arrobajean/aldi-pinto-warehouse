@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { localFallback, postChat } from '@/lib/api';
 import { buildLiveSnapshot, type ChatSource, type UiAction } from '@/lib/chat';
 import type { SimState } from '@/lib/sim/types';
@@ -26,6 +26,17 @@ export function useAssistant(
   const [open, setOpen] = useState(false);
   const seq = useRef(0);
 
+  const snapshotRef = useRef(getSnapshot);
+  const actionRef = useRef(onAction);
+
+  useEffect(() => {
+    snapshotRef.current = getSnapshot;
+  }, [getSnapshot]);
+
+  useEffect(() => {
+    actionRef.current = onAction;
+  }, [onAction]);
+
   const addMsg = useCallback((sender: ChatMsg['sender'], text: string, sources?: ChatSource[], actions?: UiAction[]) => {
     seq.current++;
     setMessages((prev) => [...prev, { id: `m${seq.current}`, sender, text, sources, actions }]);
@@ -38,7 +49,7 @@ export function useAssistant(
       addMsg('user', t);
       setLoading(true);
       try {
-        const snapshot = getSnapshot();
+        const snapshot = snapshotRef.current();
         if (!snapshot) throw new Error('Sin estado de simulación');
         const history: MessageRole[] = messages
           .filter((m) => m.sender !== 'user' || m.actions?.length)
@@ -46,7 +57,7 @@ export function useAssistant(
           .map((m) => ({ role: m.sender === 'user' ? 'user' : 'model', parts: m.text }));
         const res = await postChat({ question: t, history, snapshot: buildLiveSnapshot(snapshot) });
         addMsg('assistant', res.answer, res.sources, res.ui_actions);
-        for (const action of res.ui_actions) onAction?.(action);
+        for (const action of res.ui_actions) actionRef.current?.(action);
       } catch (err) {
         // Plan B local si no hay conexión o no está configurado.
         console.warn('chat fallback local:', err);
@@ -56,7 +67,7 @@ export function useAssistant(
         setLoading(false);
       }
     },
-    [addMsg, getSnapshot, loading, messages, onAction],
+    [addMsg, loading, messages],
   );
 
   return { messages, loading, open, setOpen, send };

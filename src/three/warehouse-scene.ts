@@ -4,16 +4,19 @@ import type { WarehouseLayout } from '@/lib/layout/types';
 import { buildPintoLayout, LEVEL_HEIGHT } from '@/lib/layout/pinto-layout';
 import type { SimState } from '@/lib/sim/types';
 import { SimsCamera, type SimsZoomLevel } from '@/three/sims-camera';
-import { applyWallMode, updateWalls, type WallMode } from '@/three/wall-modes';
+import { applyWallMode, rackTargetScale, updateRacks, updateWalls, type WallMode } from '@/three/wall-modes';
 import { EntitySync } from '@/three/entity-sync';
+import { InstanceChunks } from '@/three/instance-chunks';
+import { PartInstancer } from '@/three/part-instancer';
 import { RtlsLayers } from '@/three/rtls-layers';
 import { createBrandDecal, loadBranding } from '@/three/branding';
 import type { SmoothedTrack } from '@/lib/rtls/types';
-import { buildBuilding, type WallMesh } from '@/three/builders/build-building';
+import { buildBuilding, NAVE_FLOOR_H, type WallMesh } from '@/three/builders/build-building';
 import { buildSite } from '@/three/builders/build-site';
 import { buildRacks, type RacksModel } from '@/three/builders/build-racks';
 import { loadEuroPalletGlb } from '@/three/builders/pallets';
 import { buildDockLabels, buildLabels } from '@/three/builders/build-labels';
+import { buildStrapperMesh } from '@/three/builders/build-strappers';
 import { buildSlotPositions } from '@/lib/sim/positions';
 import { colorForStock, type StockColorMode } from '@/lib/stock/colors';
 import { articleForSku } from '@/lib/stock/catalog';
@@ -84,16 +87,34 @@ export class WarehouseScene {
   private hoverZoneId: ZoneId | null = null;
   private hoverEntityId: string | null = null;
   private machinesGroup!: THREE.Group;
+  private strapperMeshes = new Map<string, THREE.Group>();
   private trucksGroup!: THREE.Group;
   private entitySync: EntitySync | null = null;
   private simStateRef: SimState | null = null;
   private rtlsLayers: RtlsLayers | null = null;
   private racksModel: RacksModel | null = null;
+  private rackChunks: InstanceChunks[] = [];
+  private signInstancer = new PartInstancer('rack-sign-instances');
+  private staticInstancers: { instancer: PartInstancer; root: THREE.Object3D; parent: THREE.Object3D; animated: THREE.Object3D[] }[] = [];
+  private rackSigns: THREE.Group[] = [];
+
+  /** Resolución adaptativa: tope por pantalla, el actual y el que permite el tiempo de fotograma. */
+  private basePixelRatio = Math.min(window.devicePixelRatio, 2);
+  private pixelRatio = this.basePixelRatio;
+  private adaptiveRatio = this.basePixelRatio;
+  private frameMs = 16;
+  private lastRatioChange = 0;
+  private cameraMovingUntil = 0;
+  private lastCamPos = new THREE.Vector3();
+  private lastCamQuat = new THREE.Quaternion();
+  private lastCamZoom = 0;
   private slotPos = new Map<string, { x: number; y: number; z: number }>();
   private highlight: THREE.Mesh | null = null;
   private highlightUntil = 0;
 
   private followTarget: THREE.Object3D | null = null;
+  private lastAppliedRotation = Number.NaN;
+  private lastAppliedWallMode: WallMode | null = null;
 
   constructor(container: HTMLElement, callbacks: SceneCallbacks = {}) {
     this.container = container;
@@ -105,7 +126,7 @@ export class WarehouseScene {
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -166,6 +187,22 @@ export class WarehouseScene {
     this.scene.add(buildingGroup);
     this.walls = [...building.outerWalls, ...building.innerWalls];
 
+    // Edificio y exterior: cientos de piezas fijas (marcas, mobiliario, muelles) fusionadas por material. Los muros
+    // se animan (modo de muros) y las zonas invisibles se quedan como están porque las usa la selección.
+    const isZoneHit = (m: THREE.Mesh) => m.userData.zoneId !== undefined;
+    this.staticInstancers.push(
+      { instancer: new PartInstancer('building-instances'), root: building.group, parent: buildingGroup, animated: this.walls.map((w) => w.mesh) },
+      { instancer: new PartInstancer('site-instances'), root: site, parent: siteGroup, animated: [] },
+    );
+    for (const s of this.staticInstancers) {
+      s.instancer.bake(s.root, s.animated, { keep: isZoneHit });
+      s.parent.add(s.instancer.group);
+    }
+    // Las zonas no escriben color ni profundidad: no hace falta dibujarlas (el rayo de selección no mira `visible`).
+    building.group.traverse((o) => {
+      if (o instanceof THREE.Mesh && isZoneHit(o)) o.visible = false;
+    });
+
     const racksGroup = new THREE.Group();
     racksGroup.name = 'racks';
     this.racksModel = buildRacks(layout);
@@ -173,6 +210,10 @@ export class WarehouseScene {
     loadEuroPalletGlb();
     racksGroup.add(this.racksModel.group);
     this.scene.add(racksGroup);
+    // Descarte por bloques: estructura y palés de rack se dibujan en trozos que se descartan fuera de cámara.
+    for (const mesh of [...this.racksModel.group.children]) {
+      if (mesh instanceof THREE.InstancedMesh && mesh !== this.racksModel.emptyMesh) this.rackChunks.push(new InstanceChunks(mesh));
+    }
 
     // Índice de posiciones de ubicaciones para el stock.
     const slotPositions = buildSlotPositions(layout);
@@ -194,6 +235,26 @@ export class WarehouseScene {
     labelsGroup.visible = this.layerVisibility.labels;
     this.scene.add(labelsGroup);
 
+    // Carteles de pasillo montados en los racks: acompañan la altura de los racks en la animación
+    this.rackSigns = [];
+    labels.traverse((o) => {
+      if (o instanceof THREE.Group && o.name.startsWith('rack-sign-')) {
+        this.rackSigns.push(o);
+      }
+    });
+    // Las piezas fijas de los carteles (collarines, soportes y marco) se dibujan instanciadas; el tablero, tal cual.
+    for (const sign of this.rackSigns) this.signInstancer.bake(sign, []);
+    labelsGroup.add(this.signInstancer.group);
+
+    // Escala inicial de racks según el modo de muros activo
+    const initRackScale = rackTargetScale(this.wallMode);
+    this.racksModel.group.scale.y = initRackScale;
+    this.racksModel.group.userData.currentScaleY = initRackScale;
+    for (const sign of this.rackSigns) {
+      sign.userData.baseY = sign.position.y;
+      sign.position.y = NAVE_FLOOR_H + (sign.userData.baseY - NAVE_FLOOR_H) * Math.max(0.2, initRackScale);
+    }
+
     const machinesGroup = new THREE.Group();
     machinesGroup.name = 'machines';
     this.machinesGroup = machinesGroup;
@@ -203,19 +264,29 @@ export class WarehouseScene {
     this.trucksGroup = trucksGroup;
     this.scene.add(trucksGroup);
 
+    const strappersGroup = new THREE.Group();
+    strappersGroup.name = 'strappers';
+    for (const st of layout.strappers) {
+      const strapperGroup = buildStrapperMesh(st);
+      this.strapperMeshes.set(st.id, strapperGroup);
+      strappersGroup.add(strapperGroup);
+    }
+    this.scene.add(strappersGroup);
+
     this.groups.set('site', siteGroup);
     this.groups.set('building', buildingGroup);
     this.groups.set('racks', racksGroup);
     this.groups.set('labels', labelsGroup);
     this.groups.set('machines', machinesGroup);
     this.groups.set('trucks', trucksGroup);
+    this.groups.set('strappers', strappersGroup);
 
     // Placa de marca en la fachada sur (sobre los muelles).
     const facadeLogo = createBrandDecal(3.8, 4.0);
     facadeLogo.position.set(0, 6.8, layout.building.rect.zMax + 0.42);
     this.scene.add(facadeLogo);
 
-    applyWallMode(this.walls, this.wallMode, this.camera.getAngleIndex());
+    this.syncWallMode();
     void loadBranding();
   }
 
@@ -266,6 +337,12 @@ export class WarehouseScene {
     this.syncWallMode();
   }
 
+  lookTowards(cardinal: 'N' | 'S' | 'E' | 'O') {
+    this.stopFollow();
+    this.camera.lookTowards(cardinal);
+    this.syncWallMode();
+  }
+
   setZoomLevel(level: SimsZoomLevel) {
     this.stopFollow();
     this.camera.setZoomLevel(level);
@@ -291,7 +368,57 @@ export class WarehouseScene {
   }
 
   private syncWallMode() {
-    applyWallMode(this.walls, this.wallMode, this.camera.getAngleIndex());
+    const rot = this.camera.getTargetRotation();
+    this.lastAppliedRotation = rot;
+    this.lastAppliedWallMode = this.wallMode;
+    applyWallMode(this.walls, this.wallMode, rot);
+  }
+
+  // --- Control de Flejadoras (FLJ) ---
+  setStrapperPosition(id: string, x: number, z: number) {
+    const group = this.strapperMeshes.get(id);
+    if (group) {
+      // Conserva la cota (piso de la nave).
+      group.position.set(x, group.position.y, z);
+    }
+    const st = this.layout.strappers.find((s) => s.id === id);
+    if (st) {
+      const halfW = (st.rect.xMax - st.rect.xMin) / 2 || 10;
+      const halfD = (st.rect.zMax - st.rect.zMin) / 2 || 2.5;
+      st.rect.xMin = x - halfW;
+      st.rect.xMax = x + halfW;
+      st.rect.zMin = z - halfD;
+      st.rect.zMax = z + halfD;
+      st.input.x = x - halfW - 2;
+      st.input.z = z;
+      st.output.x = x + halfW + 2;
+      st.output.z = z;
+    }
+  }
+
+  getStrapperPosition(id: string): { x: number; z: number } | null {
+    const st = this.layout.strappers.find((s) => s.id === id);
+    if (!st) return null;
+    return {
+      x: (st.rect.xMin + st.rect.xMax) / 2,
+      z: (st.rect.zMin + st.rect.zMax) / 2,
+    };
+  }
+
+  focusStrapper(id: string) {
+    const pos = this.getStrapperPosition(id);
+    if (pos) {
+      this.stopFollow();
+      this.camera.focusOn({ x: pos.x, z: pos.z }, 2);
+    }
+  }
+
+  highlightStrapper(id: string, highlight: boolean) {
+    const group = this.strapperMeshes.get(id);
+    if (group) {
+      const hl = group.getObjectByName('selection-highlight');
+      if (hl) hl.visible = highlight;
+    }
   }
 
   /** Proyecta un punto del mundo a coordenadas de pantalla (para etiquetas). */
@@ -491,7 +618,7 @@ export class WarehouseScene {
   syncSimulation(state: SimState, dt: number) {
     this.simStateRef = state;
     if (!this.entitySync) {
-      this.entitySync = new EntitySync(this.layout, this.machinesGroup, this.trucksGroup, this.racksModel);
+      this.entitySync = new EntitySync(this.layout, this.machinesGroup, this.trucksGroup, this.racksModel, this.strapperMeshes);
       for (const mesh of this.entitySync.meshes) this.scene.add(mesh);
     }
     this.entitySync.sync(state, dt);
@@ -523,20 +650,15 @@ export class WarehouseScene {
   }
 
   private pickEntities(clientX: number, clientY: number): { kind: 'machine' | 'truck'; id: string } | null {
+    if (!this.entitySync) return null;
     this.raycaster.setFromCamera(this.toNdc(clientX, clientY), this.camera.camera);
-    const targets: THREE.Object3D[] = [];
-    for (const g of [this.machinesGroup, this.trucksGroup]) {
-      if (g) g.traverse((o) => targets.push(o));
-    }
-    const hits = this.raycaster.intersectObjects(targets, false);
-    for (const hit of hits) {
-      let obj: THREE.Object3D | null = hit.object;
-      while (obj) {
-        const id = obj.userData.entityId as string | undefined;
-        const kind = obj.userData.entityKind as 'machine' | 'truck' | undefined;
-        if (id && kind) return { kind, id };
-        obj = obj.parent;
-      }
+    // Los vehículos se dibujan instanciados: el rayo da el nodo de la instancia y se sube hasta la raíz del vehículo.
+    let obj = this.entitySync.instancer.pick(this.raycaster);
+    while (obj) {
+      const id = obj.userData.entityId as string | undefined;
+      const kind = obj.userData.entityKind as 'machine' | 'truck' | undefined;
+      if (id && kind) return { kind, id };
+      obj = obj.parent;
     }
     return null;
   }
@@ -589,10 +711,27 @@ export class WarehouseScene {
     this.stopFollow();
     this.camera.focusOn({ x: p.x, z: p.z }, zoom ? 1 : undefined);
     if (this.highlight) {
-      this.highlight.position.set(p.x, (3 * LEVEL_HEIGHT) / 2, p.z);
+      const rScale = (this.racksModel?.group.userData.currentScaleY as number) ?? 1.0;
+      this.highlight.position.set(p.x, NAVE_FLOOR_H + ((3 * LEVEL_HEIGHT) / 2) * rScale, p.z);
+      this.highlight.scale.y = rScale;
       this.highlight.visible = true;
       this.highlightUntil = performance.now() + 8000;
     }
+    return true;
+  }
+
+  /** Enfoca un pasillo completo con la cámara (p. ej. 'S-01', 'F-03', 'C-02'). */
+  focusAisle(aisleId: string): boolean {
+    const norm = aisleId.replace(/^SEC-/, 'S-').replace(/^FRI-/, 'F-').replace(/^CON-/, 'C-').toUpperCase();
+    const aisle = this.layout.aisles.find((a) => a.id === norm);
+    if (!aisle) return false;
+    this.stopFollow();
+    const lines = this.layout.rackLines.filter((l) => l.aisleId === norm);
+    const zCenter =
+      lines.length > 0 && lines[0].segments.length > 0
+        ? (lines[0].segments[0].zStart + lines[0].segments[lines[0].segments.length - 1].zEnd) / 2
+        : 0;
+    this.camera.focusOn({ x: aisle.xCenter, z: zCenter }, 2);
     return true;
   }
 
@@ -600,7 +739,7 @@ export class WarehouseScene {
   stockSelection(locId: string): StockSelection | null {
     const p = this.slotPos.get(locId);
     if (!p) return null;
-    const meta = this.racksModel?.byIndex.find((m) => m.locId === locId);
+    const meta = this.racksModel?.byLocId.get(locId);
     if (meta) return { locId, empty: false, sku: meta.sku, expiryDays: meta.expiryDays, x: meta.x, y: meta.y, z: meta.z };
     return { locId, empty: true, x: p.x, y: p.y, z: p.z };
   }
@@ -619,9 +758,21 @@ export class WarehouseScene {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
 
-    const dt = Math.min(this.clock.getDelta(), 0.1);
+    const rawDt = this.clock.getDelta();
+    const dt = Math.min(rawDt, 0.1);
     this.camera.update(dt);
+
+    const targetRot = this.camera.getTargetRotation();
+    if (this.lastAppliedRotation !== targetRot || this.lastAppliedWallMode !== this.wallMode) {
+      this.lastAppliedRotation = targetRot;
+      this.lastAppliedWallMode = this.wallMode;
+      applyWallMode(this.walls, this.wallMode, targetRot);
+    }
+
     updateWalls(this.walls, dt);
+    if (this.racksModel) {
+      updateRacks(this.racksModel.group, this.rackSigns, this.wallMode, dt);
+    }
 
     // Seguimiento de entidad con la cámara.
     const followId = this.camera.followId;
@@ -634,9 +785,15 @@ export class WarehouseScene {
       }
     }
 
-    // Apaga el resaltado de stock al cabo de unos segundos.
-    if (this.highlight && this.highlight.visible && performance.now() > this.highlightUntil) {
-      this.highlight.visible = false;
+    // Apaga el resaltado de stock al cabo de unos segundos y adapta su escala con los racks.
+    if (this.highlight && this.highlight.visible) {
+      if (performance.now() > this.highlightUntil) {
+        this.highlight.visible = false;
+      } else if (this.racksModel) {
+        const rScale = (this.racksModel.group.userData.currentScaleY as number) ?? 1.0;
+        this.highlight.scale.y = rScale;
+        this.highlight.position.y = NAVE_FLOOR_H + ((3 * LEVEL_HEIGHT) / 2) * rScale;
+      }
     }
 
     const sun = this.scene.userData.sun as THREE.DirectionalLight | undefined;
@@ -647,19 +804,59 @@ export class WarehouseScene {
       sun.target.updateMatrixWorld();
       const zoom = this.camera.getZoomLevel();
       const size = zoom === 3 ? 140 : zoom === 2 ? 70 : 34;
-      sun.shadow.camera.left = -size;
-      sun.shadow.camera.right = size;
-      sun.shadow.camera.top = size;
-      sun.shadow.camera.bottom = -size;
-      sun.shadow.camera.updateProjectionMatrix();
+      if (sun.shadow.camera.left !== -size) {
+        sun.shadow.camera.left = -size;
+        sun.shadow.camera.right = size;
+        sun.shadow.camera.top = size;
+        sun.shadow.camera.bottom = -size;
+        sun.shadow.camera.updateProjectionMatrix();
+      }
     }
 
     if (this.followTarget) {
       this.camera.setFollowPosition(this.followTarget.position.x, this.followTarget.position.z);
     }
 
+    for (const chunks of this.rackChunks) chunks.sync();
+    this.entitySync?.updateInstances();
+    this.signInstancer.update(this.rackSigns);
+    for (const s of this.staticInstancers) s.instancer.update([s.root]);
+    this.updatePixelRatio(rawDt);
     this.renderer.render(this.scene, this.camera.camera);
   };
+
+  /**
+   * Resolución adaptativa: con la cámara en movimiento se dibuja a 1 píxel por píxel CSS (no se aprecia la
+   * diferencia en movimiento) y, si el fotograma tarda demasiado, se baja la resolución por pasos de 0,25 hasta 1;
+   * se recupera cuando sobra tiempo. En reposo y con margen, la nitidez es la de siempre (hasta 2×).
+   */
+  private updatePixelRatio(rawDt: number) {
+    const now = performance.now();
+    this.frameMs += (Math.min(rawDt, 0.25) * 1000 - this.frameMs) * 0.1;
+
+    const cam = this.camera.camera;
+    const zoom = (cam as THREE.OrthographicCamera).zoom ?? 1;
+    if (cam.position.distanceToSquared(this.lastCamPos) > 1e-6 || 1 - Math.abs(cam.quaternion.dot(this.lastCamQuat)) > 1e-8 || zoom !== this.lastCamZoom) {
+      this.cameraMovingUntil = now + 250;
+      this.lastCamPos.copy(cam.position);
+      this.lastCamQuat.copy(cam.quaternion);
+      this.lastCamZoom = zoom;
+    }
+
+    if (this.frameMs > 25 && this.adaptiveRatio > 1 && now - this.lastRatioChange > 1000) {
+      this.adaptiveRatio = Math.max(1, this.adaptiveRatio - 0.25);
+      this.lastRatioChange = now;
+    } else if (this.frameMs < 15 && this.adaptiveRatio < this.basePixelRatio && now - this.lastRatioChange > 3000) {
+      this.adaptiveRatio = Math.min(this.basePixelRatio, this.adaptiveRatio + 0.25);
+      this.lastRatioChange = now;
+    }
+
+    const target = now < this.cameraMovingUntil ? Math.min(1, this.adaptiveRatio) : this.adaptiveRatio;
+    if (target !== this.pixelRatio) {
+      this.pixelRatio = target;
+      this.renderer.setPixelRatio(target);
+    }
+  }
 
   dispose() {
     this.disposed = true;

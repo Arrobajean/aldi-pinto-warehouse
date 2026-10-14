@@ -1,6 +1,8 @@
 'use client';
 
-import { formatClock, useNow } from '@/hooks/use-now';
+import { memo } from 'react';
+import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 export interface TopBarIndicator {
   label: string;
@@ -9,33 +11,22 @@ export interface TopBarIndicator {
 
 interface TopBarProps {
   indicators: TopBarIndicator[];
+  className?: string;
 }
 
-export function TopBar({ indicators }: TopBarProps) {
-  const now = useNow();
-
+export const TopBar = memo(function TopBar({ indicators, className }: TopBarProps) {
   return (
-    <header className="flex z-40 h-14 items-center gap-4 border-b border-line bg-panel px-4">
-      <div className="flex items-center gap-2.5">
-        <span className="h-2.5 w-2.5 rounded-[2px] bg-accent" />
-        <div className="leading-tight">
-          <div className="text-sm font-extrabold tracking-wide text-fg">ALDI</div>
-          <div className="text-xs font-medium text-muted">Plataforma Logística Pinto</div>
-        </div>
-      </div>
-
-      <div className="flex-1" />
-
-      <div className="flex items-center gap-2">
-        {indicators.map((ind) => (
-          <div key={ind.label} className="flex min-w-[74px] flex-col gap-0.5 rounded-card border border-line bg-panel-strong px-2.5 py-1">
-            <span className="font-mono text-[13px] text-fg">{ind.value}</span>
-            <span className="text-[10px] uppercase tracking-wider text-muted">{ind.label}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="border-l border-line pl-4 font-mono text-sm text-accent" data-testid="sim-clock">{now !== null ? formatClock(new Date(now)) : '--:--:--'}</div>
-    </header>
+    <div className={cn('pointer-events-auto flex items-center gap-2', className)}>
+      {indicators.map((ind, i) => (
+        <Card
+          key={ind.label}
+          data-testid={i === 0 ? 'sim-clock' : undefined}
+          className="gap-0 border-border/70 bg-card/90 px-3 py-1.5 shadow-lg backdrop-blur"
+        >
+          <span className="font-mono text-[13px] leading-none text-foreground">{ind.value}</span>
+          <span className="mt-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{ind.label}</span>
+        </Card>
+      ))}
+    </div>
   );
-}
+});

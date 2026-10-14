@@ -55,12 +55,10 @@ export function useWarehouseScene() {
       counts[slot.zoneId] = (counts[slot.zoneId] ?? 0) + 1;
     });
     return layout.zones.map<ZoneSummary>((zone) => {
-      const rackZone = layout.zones.find((z) => z.id === zone.id);
       const aisles = layout.aisles.filter((a) => a.zoneId === zone.id).length;
       const locations = counts[zone.id] ?? 0;
       return {
         ...zone,
-        rackSegments: rackZone?.rackSegments,
         surface: Math.round(rectArea(zone.rect)),
         locations,
         aisles,
@@ -68,6 +66,9 @@ export function useWarehouseScene() {
       };
     });
   }, [layout]);
+
+  const layersRef = useRef(DEFAULT_LAYERS);
+  const wallModeRef = useRef<WallMode>('cut');
 
   const acciones = useMemo(
     () => ({
@@ -87,25 +88,40 @@ export function useWarehouseScene() {
         setSelectedZone(null);
       },
       setWallMode(mode: WallMode) {
+        wallModeRef.current = mode;
         sceneRef.current?.setWallMode(mode);
         setWallModeState(mode);
       },
       cycleWallMode() {
-        const next: WallMode = wallMode === 'up' ? 'cut' : wallMode === 'cut' ? 'down' : 'up';
-        acciones.setWallMode(next);
+        const current = wallModeRef.current;
+        const next: WallMode = current === 'up' ? 'cut' : current === 'cut' ? 'down' : 'up';
+        wallModeRef.current = next;
+        sceneRef.current?.setWallMode(next);
+        setWallModeState(next);
       },
       toggleLayer(id: SceneLayerId) {
-        setLayersState((prev) => {
-          const next = { ...prev, [id]: !prev[id] };
-          sceneRef.current?.setLayer(id, next[id]);
-          return next;
-        });
+        const nextVal = !layersRef.current[id];
+        layersRef.current = { ...layersRef.current, [id]: nextVal };
+        sceneRef.current?.setLayer(id, nextVal);
+        setLayersState(layersRef.current);
       },
       selectZone(zoneId: ZoneId | null) {
         setSelectedZone(zoneId);
       },
+      lookTowards(cardinal: 'N' | 'S' | 'E' | 'O') {
+        sceneRef.current?.lookTowards(cardinal);
+      },
+      setStrapperPosition(id: string, x: number, z: number) {
+        sceneRef.current?.setStrapperPosition(id, x, z);
+      },
+      focusStrapper(id: string) {
+        sceneRef.current?.focusStrapper(id);
+      },
+      highlightStrapper(id: string, highlight: boolean) {
+        sceneRef.current?.highlightStrapper(id, highlight);
+      },
     }),
-    [wallMode],
+    [],
   );
 
   return {

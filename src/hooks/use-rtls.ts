@@ -24,39 +24,51 @@ export function useRtls(sceneRef: MutableRefObject<WarehouseScene | null>, label
 
   // Inicializa la fuente RTLS cuando la escena está lista.
   useEffect(() => {
-    const boot = setInterval(() => {
+    let unmounted = false;
+    let unsub: (() => void) | undefined;
+    let initialized = false;
+    let filter: RtlsFilter | null = null;
+    let geofences: Geofences | null = null;
+
+    const timerId = setInterval(() => {
       const scene = sceneRef.current;
-      if (!scene) return;
-      clearInterval(boot);
-      const layout = scene.layout;
-      const filter = new RtlsFilter();
-      const geofences = new Geofences(layout);
-      filterRef.current = filter;
+      if (!scene || unmounted) return;
 
-      const nowFromSim = () => scene.getLastState()?.ts ?? 0;
-      const source = new SimPositionSource(
-        (tagId) => {
-          const s = scene.getLastState();
-          if (!s) return null;
-          const m = s.machines.find((x) => x.id === tagId);
-          if (m) return { x: m.pos.x, z: m.pos.z };
-          const t = s.trucks.find((x) => x.id === tagId);
-          return t ? { x: t.pos.x, z: t.pos.z } : null;
-        },
-        () => {
-          const s = scene.getLastState();
-          if (!s) return [];
-          return [...s.machines.map((m) => m.id), ...s.trucks.map((t) => t.id)];
-        },
-        nowFromSim,
-      );
+      if (!initialized) {
+        initialized = true;
+        const layout = scene.layout;
+        filter = new RtlsFilter();
+        geofences = new Geofences(layout);
+        filterRef.current = filter;
 
-      const unsub = source.subscribe((sample) => {
-        filter.accept(sample);
-        if (Math.abs(nowFromSim() - sample.ts) < 2) sampleBufRef.current.push(sample);
-      });
+        const nowFromSim = () => scene.getLastState()?.ts ?? 0;
+        const source = new SimPositionSource(
+          (tagId) => {
+            const s = scene.getLastState();
+            if (!s) return null;
+            const m = s.machines.find((x) => x.id === tagId);
+            if (m) return { x: m.pos.x, z: m.pos.z };
+            const t = s.trucks.find((x) => x.id === tagId);
+            return t ? { x: t.pos.x, z: t.pos.z } : null;
+          },
+          () => {
+            const s = scene.getLastState();
+            if (!s) return [];
+            return [...s.machines.map((m) => m.id), ...s.trucks.map((t) => t.id)];
+          },
+          nowFromSim,
+        );
 
-      const tick = setInterval(() => {
+        unsub = source.runStream((sample) => {
+          if (!filter) return;
+          filter.accept(sample);
+          if (Math.abs(nowFromSim() - sample.ts) < 2) sampleBufRef.current.push(sample);
+        });
+
+        setReady(true);
+      }
+
+      if (filter && geofences) {
         const s = scene.getLastState();
         if (!s) return;
         const batch = sampleBufRef.current;
@@ -65,15 +77,14 @@ export function useRtls(sceneRef: MutableRefObject<WarehouseScene | null>, label
         const fresh = batch.length ? geofences.evaluate(batch, filter.tracks) : [];
         if (fresh.length) setAlerts((prev) => [...fresh, ...prev].slice(0, 120));
         setTracks(new Map(filter.tracks));
-      }, 1000);
+      }
+    }, 1000);
 
-      setReady(true);
-      return () => {
-        unsub();
-        clearInterval(tick);
-      };
-    }, 200);
-    return () => clearInterval(boot);
+    return () => {
+      unmounted = true;
+      clearInterval(timerId);
+      if (unsub) unsub();
+    };
   }, [sceneRef]);
 
   // Etiqueta flotante: un bucle posiciona el div sobre la máquina mientras hay hover.

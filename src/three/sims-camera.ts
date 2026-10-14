@@ -23,12 +23,11 @@ const ZONE_TARGETS: Partial<Record<ZoneId, Vec2Like>> = {
   seco: { x: -40, z: -12 },
   frio: { x: 78, z: -52 },
   congelado: { x: 97, z: 12 },
-  fyv: { x: 50, z: 12 },
   expedicion: { x: 0, z: 65 },
   carga_baterias: { x: -115, z: -60 },
 };
 
-const BOUNDS = { xMin: -215, xMax: 215, zMin: -155, zMax: 190 };
+const BOUNDS = { xMin: -215, xMax: 262, zMin: -155, zMax: 190 };
 
 export class SimsCamera {
   readonly camera: THREE.OrthographicCamera;
@@ -75,11 +74,41 @@ export class SimsCamera {
 
   rotate(direction: 1 | -1) {
     this.targetAngleIndex = (this.targetAngleIndex + direction + 4) % 4;
-    this.targetRotation = Math.PI / 4 + this.targetAngleIndex * (Math.PI / 2);
+    this.targetRotation += direction * (Math.PI / 2);
   }
 
   getAngleIndex() {
     return this.targetAngleIndex;
+  }
+
+  getRotation(): number {
+    return this.currentRotation;
+  }
+
+  getTargetRotation(): number {
+    return this.targetRotation;
+  }
+
+  setTargetRotation(target: number) {
+    const twoPi = Math.PI * 2;
+    const currentNorm = ((this.currentRotation % twoPi) + twoPi) % twoPi;
+    const targetNorm = ((target % twoPi) + twoPi) % twoPi;
+    let diff = targetNorm - currentNorm;
+    if (diff > Math.PI) diff -= twoPi;
+    if (diff < -Math.PI) diff += twoPi;
+    this.targetRotation = this.currentRotation + diff;
+    const finalNorm = ((this.targetRotation % twoPi) + twoPi) % twoPi;
+    this.targetAngleIndex = Math.round((finalNorm - Math.PI / 4) / (Math.PI / 2) + 4) % 4;
+  }
+
+  lookTowards(cardinal: 'N' | 'S' | 'E' | 'O') {
+    const angles: Record<'N' | 'S' | 'E' | 'O', number> = {
+      N: 0,
+      O: Math.PI / 2,
+      S: Math.PI,
+      E: -Math.PI / 2,
+    };
+    this.setTargetRotation(angles[cardinal]);
   }
 
   setZoomLevel(level: SimsZoomLevel) {
@@ -159,10 +188,13 @@ export class SimsCamera {
 
   update(dt: number) {
     this.currentRotation += (this.targetRotation - this.currentRotation) * (1 - Math.exp(-6 * dt));
+    const prevZoom = this.camera.zoom;
     this.currentZoom += (this.targetZoom - this.currentZoom) * (1 - Math.exp(-8 * dt));
     this.currentLookAt.lerp(this.targetLookAt, 1 - Math.exp(-10 * dt));
-    this.camera.zoom = this.currentZoom;
-    this.camera.updateProjectionMatrix();
+    if (Math.abs(this.currentZoom - prevZoom) > 1e-4) {
+      this.camera.zoom = this.currentZoom;
+      this.camera.updateProjectionMatrix();
+    }
     this.updateCameraPosition();
   }
 

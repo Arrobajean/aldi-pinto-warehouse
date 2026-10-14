@@ -1,9 +1,15 @@
 'use client';
 
+import { memo } from 'react';
 import { Pause, Play, RotateCcw } from 'lucide-react';
 import type { SimState } from '@/lib/sim/types';
 import { formatSimTime } from '@/lib/sim/clock';
 import type { SimSpeed } from '@/hooks/use-simulation';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 
 interface SimControlsProps {
   state: SimState | null;
@@ -17,44 +23,53 @@ interface SimControlsProps {
 
 const SPEEDS: SimSpeed[] = [0, 1, 10, 60, 300];
 
-export function SimControls({ state, speed, running, onPlay, onPause, onSpeed, onRestart }: SimControlsProps) {
+function SimControlsBase({ state, speed, running, onPlay, onPause, onSpeed, onRestart }: SimControlsProps) {
   return (
-    <div className="pointer-events-auto absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-card border border-line bg-panel/95 px-3 py-2 shadow-card backdrop-blur">
-      <span className="flex items-center gap-1.5 font-mono text-sm text-accent">
-        <span className="h-2 w-2 rounded-full bg-accent" />
+    <Card className="pointer-events-auto absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 flex-row items-center gap-2 border-border/70 bg-card/90 px-3 py-2 shadow-lg backdrop-blur">
+      <span className="flex items-center gap-1.5 font-mono text-sm text-primary">
+        <span className="size-2 rounded-full bg-primary" />
         {state ? formatSimTime(state.ts) : '—'}
       </span>
-      <span className="rounded-md bg-panel-strong px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted">
+      <Badge variant="secondary" className="font-mono text-[10px] uppercase">
         Turno {state?.shiftId ?? '…'}
-      </span>
-      <span className="mx-1 h-5 w-px bg-line" />
-      <button
-        className="flex h-8 w-9 items-center justify-center rounded-lg border border-line bg-panel-strong text-fg transition-colors hover:border-accent"
+      </Badge>
+      <Separator orientation="vertical" className="mx-1 !h-5" />
+      <Button
+        size="icon"
+        variant="outline"
+        className="size-8"
         onClick={running ? onPause : onPlay}
         title={running ? 'Pausar' : 'Reproducir'}
+        aria-label={running ? 'Pausar simulación' : 'Iniciar simulación'}
       >
-        {running ? <Pause size={14} /> : <Play size={14} />}
-      </button>
+        {running ? <Pause /> : <Play />}
+      </Button>
       <div className="flex gap-1">
         {SPEEDS.map((v) => (
-          <button
+          <Button
             key={v}
-            className={`rounded-lg border px-2 py-1 font-mono text-[11px] transition-colors ${
-              speed === v ? 'border-accent text-accent' : 'border-line text-muted hover:text-fg'
-            }`}
+            size="sm"
+            variant={speed === v ? 'default' : 'outline'}
+            className="h-7 px-2 font-mono text-[11px]"
             onClick={() => onSpeed(v)}
+            aria-label={v === 0 ? 'Pausar velocidad' : `Velocidad ${v}x`}
           >
             {v === 0 ? '‖' : `×${v}`}
-          </button>
+          </Button>
         ))}
       </div>
-      <button
-        className="flex h-8 w-9 items-center justify-center rounded-lg border border-line bg-panel-strong text-muted transition-colors hover:text-fg"
+      <Button
+        size="icon"
+        variant="outline"
+        className={cn('size-8 text-muted-foreground')}
         onClick={onRestart}
         title="Reiniciar día"
+        aria-label="Reiniciar simulación"
       >
-        <RotateCcw size={13} />
-      </button>
-    </div>
+        <RotateCcw />
+      </Button>
+    </Card>
   );
 }
+
+export const SimControls = memo(SimControlsBase);

@@ -1,5 +1,5 @@
-import type { Graph, GraphNode, Rect } from '@/lib/layout/types';
 import { segmentClear } from '@/lib/layout/pinto-layout';
+import type { Graph, GraphNode, Rect } from '@/lib/layout/types';
 import type { Point } from '@/lib/sim/types';
 
 interface WrappedNode {

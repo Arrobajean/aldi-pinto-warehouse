@@ -1,9 +1,12 @@
 import * as THREE from 'three';
 import type { WarehouseLayout } from '@/lib/layout/types';
-import { LEVEL_HEIGHT, floorPalets, forEachRackSlot, seededRandom } from '@/lib/layout/pinto-layout';
+import { LEVEL_HEIGHT, forEachRackSlot, seededRandom } from '@/lib/layout/pinto-layout';
 import { standard } from '@/three/builders/utils';
 import { NAVE_FLOOR_H } from '@/three/builders/build-building';
 import { PalletBatch } from '@/three/builders/pallets';
+import { articleForSku, skuForAisle } from '@/lib/stock/catalog';
+import { colorForStock } from '@/lib/stock/colors';
+import { PALLET_HEIGHT } from '@/lib/sim/types';
 
 const MODULE = 2.7;
 
@@ -20,24 +23,13 @@ export interface RackPaletMeta {
 export interface RacksModel {
   group: THREE.Group;
   paletMesh: THREE.InstancedMesh;
-  floorMesh: THREE.InstancedMesh;
   /** Lote de palés de estantería (`paletMesh` es su malla de carga). */
   palletBatch: PalletBatch;
   emptyMesh: THREE.InstancedMesh;
   byIndex: RackPaletMeta[];
+  byLocId: Map<string, RackPaletMeta>;
   emptyIndex: string[];
 }
-
-/** Paleta de color de familia de producto para la ocupación inicial. */
-const FAMILY_COLORS = [
-  0xa9875b,
-  0xe0a96d,
-  0xc7b13a,
-  0x7fb4e8,
-  0x8fd6ff,
-  0x8fd694,
-  0xb48ad9,
-];
 
 function instanced(geom: THREE.BufferGeometry, material: THREE.Material, count: number) {
   const mesh = new THREE.InstancedMesh(geom, material, count);
@@ -59,8 +51,9 @@ export function buildRacks(layout: WarehouseLayout): RacksModel {
 
   // --- Puntales ---
   const posts: { x: number; z: number; height: number }[] = [];
+  // Los puntales llegan hasta el larguero que sostiene el último nivel (2 × LEVEL_HEIGHT = 3,6 m): el último nivel no lleva columnas.
   for (const line of layout.rackLines) {
-    const postHeight = line.levels * LEVEL_HEIGHT;
+    const postHeight = (line.levels - 1) * LEVEL_HEIGHT;
     for (const seg of line.segments) {
       for (let m = 0; m <= seg.moduleCount; m++) {
         const z = seg.zStart + m * MODULE;
@@ -92,16 +85,12 @@ export function buildRacks(layout: WarehouseLayout): RacksModel {
     for (const seg of line.segments) {
       for (let m = 0; m < seg.moduleCount; m++) {
         const z0 = seg.zStart + m * MODULE;
-        // Largueros donde apoyan los niveles 1 y 2 (1,6 y 3,2 m).
+        // Largueros donde apoyan los niveles 1 y 2 (1,8 y 3,6 m). El último larguero (3,6 m) es la cabeza de los puntales.
         for (let level = 1; level < line.levels; level++) {
           const y = level * LEVEL_HEIGHT;
           beams.push({ x: line.xCenter - dx, y, z: z0, len: MODULE - 0.05 });
           beams.push({ x: line.xCenter + dx, y, z: z0, len: MODULE - 0.05 });
         }
-        // Travesaño superior ligero que cierra el marco (un larguero por lado).
-        const topY = line.levels * LEVEL_HEIGHT - 0.1;
-        beams.push({ x: line.xCenter - dx, y: topY, z: z0, len: MODULE - 0.05 });
-        beams.push({ x: line.xCenter + dx, y: topY, z: z0, len: MODULE - 0.05 });
       }
     }
   }
@@ -139,7 +128,7 @@ export function buildRacks(layout: WarehouseLayout): RacksModel {
   const braces: { x: number; y: number; z: number; len: number; angle: number }[] = [];
   for (const line of layout.rackLines) {
     const y0 = 0.1;
-    const y1 = line.levels * LEVEL_HEIGHT - 0.15;
+    const y1 = (line.levels - 1) * LEVEL_HEIGHT - 0.15;
     const dy = y1 - y0;
     for (const seg of line.segments) {
       for (let m = 0; m < seg.moduleCount; m += 4) {
@@ -163,27 +152,35 @@ export function buildRacks(layout: WarehouseLayout): RacksModel {
 
   // --- Palets y huecos vacíos en una sola pasada (misma semilla) ---
   const palletColor = new THREE.Color();
-  const palletBatch = new PalletBatch(layout.stats.racksFilled, { lod: 'lo' });
+  // Capacidad = todas las ubicaciones: el ~85 % de ocupación es aleatorio y puede superar racksFilled.
+  const palletCapacity = layout.stats.locations;
+  const palletBatch = new PalletBatch(palletCapacity, { lod: 'lo' });
   const palletMesh = palletBatch.load;
   const emptyIdxPos: { locId: string; x: number; y: number; z: number }[] = [];
   const byIndex: RackPaletMeta[] = [];
+  const byLocId = new Map<string, RackPaletMeta>();
 
   let palletIndex = 0;
   forEachRackSlot(layout, (slot) => {
-    const h = 1.0 + rng() * 0.5;
+    const h = PALLET_HEIGHT;
     if (rng() <= 0.85) {
-      const sku = `SKU-${1000 + Math.floor(rng() * 1800)}`;
       const temp: 'dry' | 'cool' | 'frozen' = slot.zoneId === 'frio' ? 'cool' : slot.zoneId === 'congelado' ? 'frozen' : 'dry';
-      palletColor.setHex(FAMILY_COLORS[Math.floor(rng() * FAMILY_COLORS.length)]);
+      // El artículo se asigna según el pasillo y familia (slotting logístico ALDI Pinto).
+      const sku = skuForAisle(slot.aisleId, slot.zoneId, rng());
+      const expiryDays = 5 + Math.floor(rng() * 120);
+      palletColor.setHex(colorForStock('occupancy', sku, temp, expiryDays, articleForSku(sku)));
       palletBatch.set(palletIndex, slot.x, slot.y, slot.z, 0, h, palletColor);
-      byIndex[palletIndex] = { locId: slot.locationId, x: slot.x, y: slot.y, z: slot.z, sku, temp, expiryDays: 5 + Math.floor(rng() * 120) };
+      const meta: RackPaletMeta = { locId: slot.locationId, x: slot.x, y: slot.y, z: slot.z, sku, temp, expiryDays };
+      byIndex[palletIndex] = meta;
+      byLocId.set(slot.locationId, meta);
       palletIndex++;
     } else {
       emptyIdxPos.push({ locId: slot.locationId, x: slot.x, y: slot.y, z: slot.z });
     }
   });
-  // Instancias sobrantes (racksFilled supera los palés colocados): ocultas, o se dibujarían en el origen.
-  for (let i = palletIndex; i < layout.stats.racksFilled; i++) palletBatch.hide(i);
+  // Instancias sobrantes (la capacidad supera los palés colocados): ocultas y fuera del dibujo.
+  for (let i = palletIndex; i < palletCapacity; i++) palletBatch.hide(i);
+  palletBatch.setCount(palletIndex);
   palletBatch.update();
   palletBatch.base.name = 'pallets';
   palletMesh.name = 'pallets';
@@ -205,18 +202,5 @@ export function buildRacks(layout: WarehouseLayout): RacksModel {
   group.add(emptyMesh);
   const emptyIndex = emptyIdxPos.map((e) => e.locId);
 
-  // --- Palets en el suelo de FyV (calles abiertas) ---
-  const floor = floorPalets();
-  const floorBatch = new PalletBatch(floor.length, { lod: 'lo' });
-  const floorColor = new THREE.Color(0x8fd694);
-  floor.forEach((f, i) => {
-    const h = 1.0 + rng() * 0.4;
-    floorBatch.set(i, f.x, 0, f.z, 0, h, floorColor);
-  });
-  floorBatch.update();
-  floorBatch.base.name = 'pallets';
-  floorBatch.load.name = 'pallets';
-  group.add(floorBatch.base, floorBatch.load);
-
-  return { group, paletMesh: palletMesh, floorMesh: floorBatch.load, palletBatch, emptyMesh, byIndex, emptyIndex };
+  return { group, paletMesh: palletMesh, palletBatch, emptyMesh, byIndex, byLocId, emptyIndex };
 }

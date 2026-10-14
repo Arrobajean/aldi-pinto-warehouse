@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Dock, DockFace, Rect, WarehouseLayout } from '@/lib/layout/types';
 import { DOCK_PITCH, FACE_V, dockU, faceXZ } from '@/lib/layout/dock-geometry';
+import { buildPartitions } from '@/lib/layout/pinto-layout';
 import { box, lambert, plane } from '@/three/builders/utils';
 import {
   concreteFloor,
@@ -19,8 +20,10 @@ import {
 
 export interface WallMesh {
   mesh: THREE.Mesh;
-  /** Altura máxima del muro (con modo 'up'). */
+  /** Cota superior del muro (con modo 'up'), medida desde el piso de la nave. */
   fullTop: number;
+  /** Cota inferior del muro, medida desde el piso de la nave (0 salvo el paño por encima de las puertas). */
+  baseY: number;
   /** Normal exterior del muro (0,0,±1 o ±1,0,0). */
   normal: { x: number; z: number };
   /** true si es cerramiento exterior; false para tabiques interiores. */
@@ -39,19 +42,21 @@ const CROSS_AISLE_TONE = 0xb4bcc6;
 /** Franjas de la mancha de andén y del antesala, justo por encima de las marcas de calle. */
 const ANTESALA_STRIP_Y = MARK_Y + 0.005;
 /** Ancho dibujado de cada calle de pre-carga (los muelles están cada 3,5 m dentro de cada bloque). */
-const LANE_DRAW_WIDTH = 2.2;
+const LANE_DRAW_WIDTH = 2.0;
+/** Hueco libre entre el final de las líneas de cada calle de pre-carga y la fachada (m), como en las calles del sur. */
+const LANE_PAINT_GAP = 4;
 
 /** Altura del piso único de la nave sobre el patio: igual a la cota de la caja de un remolque (1,2 m). */
 export const NAVE_FLOOR_H = 1.2;
 /** Cara exterior de la fachada sur (puertas en z=80) y borde exterior de la niveladora (trasera del remolque en z=82,5). */
 export const DOCK_FACE_Z = 80;
 export const DOCK_EDGE_Z = 82.4;
+/** Altura del dintel de las puertas de muelle sobre el piso de la nave (m): por encima se dibuja pared. */
+const DOOR_TOP = 2.6;
 /** Peldaños de la escalera peatonal: 4 contrahuellas de 0,3 m, huella de 0,5 m. */
 const STAIR_RISERS = 4;
 const STAIR_RISE = NAVE_FLOOR_H / STAIR_RISERS;
 const STAIR_TREAD = 0.5;
-/** Pasillo de servicio del tramo este: hueco en los muros que lo cruzan (x entre 106,5 y 113,5). */
-const EAST_CORRIDOR_OPEN = { xMin: 106.5, xMax: 113.5 };
 
 interface Span {
   xMin: number;
@@ -77,21 +82,23 @@ function segmentsWithHoles(xMin: number, xMax: number, holes: Span[], step = 0.2
   return segs;
 }
 
-/** Muro a lo largo de x, en la línea z; `holes` son huecos en x. Altura completa `height` desde el piso de la nave. */
-function wallAlongX(x0: number, x1: number, z: number, height: number, mat: THREE.Material, holes: Span[], normalZ: number): WallMesh[] {
+/** Muro a lo largo de x, en la línea z; `holes` son huecos en x. Va de `y0` a `top` (cotas sobre el piso de la nave). */
+function wallAlongX(x0: number, x1: number, z: number, top: number, mat: THREE.Material, holes: Span[], normalZ: number, y0 = 0): WallMesh[] {
   return segmentsWithHoles(x0, x1, holes).map((seg) => ({
-    mesh: box(seg.xMax - seg.xMin, height, WALL_THICKNESS, mat, (seg.xMin + seg.xMax) / 2, height / 2, z),
-    fullTop: height,
+    mesh: box(seg.xMax - seg.xMin, top - y0, WALL_THICKNESS, mat, (seg.xMin + seg.xMax) / 2, (top + y0) / 2, z),
+    fullTop: top,
+    baseY: y0,
     normal: { x: 0, z: normalZ },
     outer: false,
   }));
 }
 
-/** Muro a lo largo de z, en la línea x; `holes` son huecos en z. */
-function wallAlongZ(z0: number, z1: number, x: number, height: number, mat: THREE.Material, holes: Span[], normalX: number): WallMesh[] {
+/** Muro a lo largo de z, en la línea x; `holes` son huecos en z. Va de `y0` a `top` (cotas sobre el piso de la nave). */
+function wallAlongZ(z0: number, z1: number, x: number, top: number, mat: THREE.Material, holes: Span[], normalX: number, y0 = 0): WallMesh[] {
   return segmentsWithHoles(z0, z1, holes).map((seg) => ({
-    mesh: box(WALL_THICKNESS, height, seg.xMax - seg.xMin, mat, x, height / 2, (seg.xMin + seg.xMax) / 2),
-    fullTop: height,
+    mesh: box(WALL_THICKNESS, top - y0, seg.xMax - seg.xMin, mat, x, (top + y0) / 2, (seg.xMin + seg.xMax) / 2),
+    fullTop: top,
+    baseY: y0,
     normal: { x: normalX, z: 0 },
     outer: false,
   }));
@@ -151,6 +158,11 @@ function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
   const baseW = rect.xMax - rect.xMin;
   const baseD = rect.zMax - rect.zMin;
   group.add(concreteFloor(baseW, baseD, (rect.xMin + rect.xMax) / 2, NAVE_SLAB_Y, (rect.zMin + rect.zMax) / 2, 'nave-base'));
+  // Sala anexa (ampliación al oeste): mismo hormigón y misma cota que la nave.
+  const annex = layout.building.annex;
+  if (annex) {
+    group.add(concreteFloor(annex.xMax - annex.xMin, annex.zMax - annex.zMin, (annex.xMin + annex.xMax) / 2, NAVE_SLAB_Y, (annex.zMin + annex.zMax) / 2, 'nave-annex-base'));
+  }
   // Zonas: áreas invisibles (no escriben color ni profundidad) que solo sirven para elegir zona con el ratón.
   for (const zone of layout.zones) {
     const w = zone.rect.xMax - zone.rect.xMin;
@@ -175,37 +187,80 @@ function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
     group.add(paintFill(ca.xMax - ca.xMin, ca.zMax - ca.zMin, CROSS_AISLE_TONE, (ca.xMin + ca.xMax) / 2, (ca.zMin + ca.zMax) / 2, NAVE_TINT_Y));
   }
 
-  // Salas de carga y de reposo: contorno, calles de maniobra y plazas pintadas sobre el hormigón.
+  // Pasillo de separación/amortiguación entre sala de carga y la antigua sala de máquinas (z = -93..-85)
+  group.add(paintFill(20 - 0.6, 8 - 0.4, CROSS_AISLE_TONE, -115, -89, NAVE_TINT_Y));
+  paintLine(group, -125 + 0.3, -93, -105 - 0.3, -93, SAFETY_YELLOW, 0.2);
+
+  // Salas de carga y anexa de máquinas: contorno, calles de maniobra y plazas pintadas sobre el hormigón.
   for (const room of layout.rooms) {
     const r = room.rect;
     const edge = room.kind === 'carga' ? SAFETY_YELLOW : PAINT_WHITE;
     paintOutline(group, r.xMin + 0.3, r.xMax - 0.3, r.zMin + 0.3, r.zMax - 0.3, edge, 0.2);
-    // Calle de maniobra entre las dos filas de cada bloque: 3,6 m desde el borde sur de la fila norte.
-    const x0 = Math.min(...room.spots.map((s) => s.x)) - 1.3;
-    const x1 = Math.max(...room.spots.map((s) => s.x)) + 1.3;
-    for (const zn of new Set(room.spots.filter((s) => s.row === 'n').map((s) => s.z))) {
-      group.add(paintFill(x1 - x0, 3.6, CROSS_AISLE_TONE, (x0 + x1) / 2, zn + 3.8, NAVE_TINT_Y));
+    // Calles de maniobra en tono claro. Por defecto, las dos de la franja oeste (a lo largo de toda la sala);
+    // la sala anexa declara las suyas en `room.lanes`.
+    if (room.lanes) {
+      for (const l of room.lanes) {
+        group.add(paintFill(l.xMax - l.xMin, l.zMax - l.zMin, CROSS_AISLE_TONE, (l.xMin + l.xMax) / 2, (l.zMin + l.zMax) / 2, NAVE_TINT_Y));
+      }
+    } else {
+      // Calle Oeste (salida, x = -118.5)
+      group.add(paintFill(3.6, r.zMax - r.zMin - 0.6, CROSS_AISLE_TONE, -118.5, (r.zMin + r.zMax) / 2, NAVE_TINT_Y));
+      // Calle Este (troncal de entrada, x = -109.5)
+      group.add(paintFill(3.6, r.zMax - r.zMin - 0.6, CROSS_AISLE_TONE, -109.5, (r.zMin + r.zMax) / 2, NAVE_TINT_Y));
     }
     for (const spot of room.spots) {
-      paintOutline(group, spot.x - 1.2, spot.x + 1.2, spot.z - 2, spot.z + 2, edge, 0.1);
+      // Plazas en horizontal y paralelas: fondo 4.0 m en X, ancho 2.2 m en Z
+      paintOutline(group, spot.x - 2.0, spot.x + 2.0, spot.z - 1.05, spot.z + 1.05, edge, 0.1);
       if (room.kind === 'carga') {
-        // Cargador: columna pegada al fondo de la plaza (contra la pared), no en el centro.
-        const backZ = spot.row === 'n' ? spot.z - 1.75 : spot.z + 1.75;
-        group.add(box(0.9, 1.4, 0.5, lambert(0x2a3550), spot.x, 0.7, backZ));
+        // Cargador: columna pegada al fondo oeste de la plaza (contra la pared)
+        group.add(box(0.5, 1.4, 0.9, lambert(0x2a3550), spot.x - 1.75, 0.7, spot.z));
       }
     }
   }
 
-  // Flejadoras automáticas: cuerpo de la máquina y entrada/salida marcadas.
-  for (const st of layout.strappers) {
-    const r = st.rect;
-    const cx = (r.xMin + r.xMax) / 2;
-    const cz = (r.zMin + r.zMax) / 2;
-    group.add(box(r.xMax - r.xMin, 1.4, r.zMax - r.zMin, lambert(0x3c4a63), cx, 0.7, cz));
-    group.add(box(r.xMax - r.xMin - 1, 0.1, 1.2, lambert(0xf39200), cx, 1.45, cz));
-    for (const port of [st.input, st.output]) {
-      paintOutline(group, port.x - 1.5, port.x + 1.5, port.z - 1.2, port.z + 1.2, SAFETY_YELLOW, 0.15);
-    }
+  // Antigua sala de máquinas (z −85…−14,5), ya sin plazas: sus dos calles siguen siendo el circuito de sentido único
+  // hacia la sala anexa, así que se pintan igual que antes, sin contorno.
+  for (const x of [-118.5, -109.5]) group.add(paintFill(3.6, 70.5 - 0.6, CROSS_AISLE_TONE, x, -49.75, NAVE_TINT_Y));
+
+  // Señalización de sentido único en la zona de máquinas y carga:
+  // Calle Este (TRUNK_X = -109.5): ENTRADA -> Flechas blancas hacia el Norte (dirZ = -1)
+  paintArrow(group, -109.5, -25, -1, PAINT_WHITE, 1.1);
+  paintArrow(group, -109.5, -55, -1, PAINT_WHITE, 1.1);
+  paintArrow(group, -109.5, -75, -1, PAINT_WHITE, 1.1);
+  paintArrow(group, -109.5, -102, -1, PAINT_WHITE, 1.1);
+
+  // Calle Oeste (DRIVE_AISLE_X = -118.5): SALIDA -> Flechas blancas hacia el Sur (dirZ = 1)
+  paintArrow(group, -118.5, -102, 1, PAINT_WHITE, 1.1);
+  paintArrow(group, -118.5, -75, 1, PAINT_WHITE, 1.1);
+  paintArrow(group, -118.5, -55, 1, PAINT_WHITE, 1.1);
+  paintArrow(group, -118.5, -25, 1, PAINT_WHITE, 1.1);
+
+  // Flecha transversal de interconexión en el pasillo de separación (z = -89, x: -109.5 -> -118.5)
+  const crossArrowG = new THREE.Group();
+  paintArrow(crossArrowG, 0, 0, 1, SAFETY_YELLOW, 1.1);
+  crossArrowG.position.set(-114, 0, -89);
+  crossArrowG.rotation.y = -Math.PI / 2;
+  group.add(crossArrowG);
+
+  // Señalización vial de circulación en serpentina en la cámara de Frío:
+  const coldAisleDirs: Record<string, 1 | -1> = {
+    'F-01': -1, // Sur -> Norte
+    'F-02': 1,  // Norte -> Sur
+    'F-03': 1,  // Norte -> Sur (hacia nueva puerta sur)
+    'F-04': -1, // Sur -> Norte
+    'F-05': 1,  // Norte -> Sur
+  };
+  const aisleMap = new Map(layout.aisles.map((x) => [x.id, x]));
+  for (const [aisleId, dir] of Object.entries(coldAisleDirs)) {
+    const a = aisleMap.get(aisleId);
+    if (!a) continue;
+    paintArrow(group, a.xCenter, -95, dir, PAINT_WHITE, 1.1);
+    paintArrow(group, a.xCenter, -48, dir, PAINT_WHITE, 1.1);
+  }
+  // Flecha de salida rápida directa en la explanada sur frente a la nueva puerta F-03 (z = -28):
+  const f03Aisle = aisleMap.get('F-03');
+  if (f03Aisle) {
+    paintArrow(group, f03Aisle.xCenter, -28, 1, SAFETY_YELLOW, 1.3);
   }
 
   // Calles de pre-carga: bordes amarillos de seguridad y flecha de sentido hacia la puerta.
@@ -214,7 +269,9 @@ function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
     const across = dock.face === 'south' ? lr.xMax - lr.xMin : lr.zMax - lr.zMin;
     const half = Math.min(LANE_DRAW_WIDTH, across) / 2;
     const u = dockU(dock);
-    const [v0, v1] = dock.face === 'south' ? [lr.zMin, lr.zMax] : [lr.xMin, lr.xMax];
+    // Las líneas paran a LANE_PAINT_GAP de la fachada: en el sur coincide con lr.zMax; en el este (frío) antes llegaban a 1 m.
+    const v0 = dock.face === 'south' ? lr.zMin : lr.xMin;
+    const v1 = FACE_V[dock.face] - LANE_PAINT_GAP;
     for (const side of [u - half, u + half]) {
       const a = faceXZ(dock.face, side, v0);
       const b = faceXZ(dock.face, side, v1);
@@ -239,12 +296,14 @@ function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
     paintLine(group, ca.xMin, ca.zMax - 0.2, ca.xMax, ca.zMax - 0.2, SAFETY_YELLOW, 0.14);
   }
 
-  // Pasillos de rack: líneas amarillas a ambos lados de cada pasillo, en los tramos de estantería.
+  buildConsolidationFloor(group, layout);
+
+  // Pasillos de rack: líneas amarillas a ambos lados de cada pasillo, pegadas al frente de los palés.
   for (const aisle of layout.aisles) {
     const bSide = layout.rackLines.filter((rl) => rl.aisleId === aisle.id && rl.side === 'B');
     for (const rl of bSide) {
       for (const seg of rl.segments) {
-        for (const xEdge of [aisle.xCenter - 1.6, aisle.xCenter + 1.6]) {
+        for (const xEdge of [aisle.xCenter - 2.65, aisle.xCenter + 2.65]) {
           paintLine(group, xEdge, seg.zStart, xEdge, seg.zEnd, SAFETY_YELLOW, 0.12);
         }
       }
@@ -254,52 +313,102 @@ function buildZoneFloors(layout: WarehouseLayout): THREE.Group {
   return group;
 }
 
+/** Tono de la playa de consolidación de seco (naranja suave, distinto del gris de seco y del amarillo de expedición). */
+const CONSOLIDATION_TONE = 0xe9c9a0;
+const CONSOLIDATION_EDGE = 0xf39200;
+
+/**
+ * Playa de consolidación: solera tintada con contorno, calles pintadas (separadores blancos, número y flecha de
+ * avance hacia el fondo, desde donde recoge la transpaleta) y recuadro de entrega (preparador/flejadora).
+ */
+function buildConsolidationFloor(group: THREE.Group, layout: WarehouseLayout) {
+  for (const area of layout.consolidation) {
+    const r = area.rect;
+    group.add(paintFill(r.xMax - r.xMin - 0.4, r.zMax - r.zMin - 0.4, CONSOLIDATION_TONE, (r.xMin + r.xMax) / 2, (r.zMin + r.zMax) / 2, NAVE_TINT_Y));
+    paintOutline(group, r.xMin + 0.2, r.xMax - 0.2, r.zMin + 0.2, r.zMax - 0.2, CONSOLIDATION_EDGE, 0.3, NAVE_LINE_Y);
+    for (const lane of area.lanes) {
+      const ex = lane.x + lane.dirX * lane.length;
+      const ez = lane.z + lane.dirZ * lane.length;
+      // Bordes de la calle a ±0,7 m del eje (palé de 0,8 × 1,2 m con holgura), perpendiculares a la dirección.
+      const px = -lane.dirZ * 0.7;
+      const pz = lane.dirX * 0.7;
+      paintLine(group, lane.x + px, lane.z + pz, ex + px, ez + pz, PAINT_WHITE, 0.08);
+      paintLine(group, lane.x - px, lane.z - pz, ex - px, ez - pz, PAINT_WHITE, 0.08);
+      if (lane.dirX === 0) {
+        paintArrow(group, ex - lane.dirZ * 1.2, ez - lane.dirZ * 1.2, lane.dirZ > 0 ? 1 : -1, PAINT_WHITE, 0.6);
+      }
+    }
+    const p = area.dropPoint;
+    paintOutline(group, p.x - 1.5, p.x + 1.5, p.z - 1.2, p.z + 1.2, SAFETY_YELLOW, 0.15);
+  }
+}
+
+/** Hueco de 1,2 m en la fachada al pie de cada escalera peatonal, para que la escalera lleve dentro de la nave. */
+function stairDoorHoles(layout: WarehouseLayout, face: DockFace): Span[] {
+  return dockBlocks(layout.docks)
+    .filter((b) => b.face === face)
+    .map((b) => ({ xMin: dockStairX(b) - 0.6, xMax: dockStairX(b) + 0.6 }));
+}
+
 function buildOuterWalls(layout: WarehouseLayout): WallMesh[] {
   const { rect, freeHeight } = layout.building;
   const mat = lambert(0xdfe6ee);
   const matSouth = lambert(0xd5dce7);
 
-  // Huecos de las puertas: en la fachada sur (x) y en la este (z).
-  const southHoles = layout.docks
-    .filter((d) => d.face === 'south')
-    .map((d) => ({ xMin: d.x - d.doorWidth / 2, xMax: d.x + d.doorWidth / 2 }));
-  const eastHoles = layout.docks
-    .filter((d) => d.face === 'east')
-    .map((d) => ({ xMin: d.z - d.doorWidth / 2, xMax: d.z + d.doorWidth / 2 }));
+  // Huecos de las puertas: en la fachada sur (x) y en la este (z). Cada escalera peatonal tiene su puerta al final.
+  const southHoles = [
+    ...layout.docks
+      .filter((d) => d.face === 'south')
+      .map((d) => ({ xMin: d.x - d.doorWidth / 2, xMax: d.x + d.doorWidth / 2 })),
+    ...stairDoorHoles(layout, 'south'),
+  ];
+  const eastHoles = [
+    ...layout.docks
+      .filter((d) => d.face === 'east')
+      .map((d) => ({ xMin: d.z - d.doorWidth / 2, xMax: d.z + d.doorWidth / 2 })),
+    ...stairDoorHoles(layout, 'east'),
+  ];
+
+  // Muro oeste de la nave: con la sala anexa, el tramo que da a ella (z annex.zMin…zMax) deja de ser exterior; es el
+  // tabique interior 'annex-e' (con la puerta de 6 m) y lo dibuja `buildInnerWalls`. Aquí quedan los tramos norte y sur.
+  const annex = layout.building.annex;
+  const westWall = annex
+    ? [
+        ...wallAlongZ(rect.zMin, annex.zMin, rect.xMin, freeHeight, mat, [], -1),
+        ...wallAlongZ(annex.zMax, rect.zMax, rect.xMin, freeHeight, mat, [], -1),
+        // Cerramiento propio de la anexa: oeste, norte y sur, a la altura completa de la nave.
+        ...wallAlongZ(annex.zMin, annex.zMax, annex.xMin, freeHeight, mat, [], -1),
+        ...wallAlongX(annex.xMin, annex.xMax, annex.zMin, freeHeight, mat, [], -1),
+        ...wallAlongX(annex.xMin, annex.xMax, annex.zMax, freeHeight, mat, [], 1),
+      ]
+    : wallAlongZ(rect.zMin, rect.zMax, rect.xMin, freeHeight, mat, [], -1);
 
   return [
-    ...wallAlongX(rect.xMin, rect.xMax, rect.zMax, freeHeight, matSouth, southHoles, 1),
+    // Fachadas con muelles: el hueco de cada puerta llega solo hasta el dintel (`DOOR_TOP`); por encima, un paño
+    // macizo, para que sobre las compuertas se vea pared y no un vano abierto hasta el techo.
+    ...wallAlongX(rect.xMin, rect.xMax, rect.zMax, DOOR_TOP, matSouth, southHoles, 1),
+    ...wallAlongX(rect.xMin, rect.xMax, rect.zMax, freeHeight, matSouth, [], 1, DOOR_TOP),
     ...wallAlongX(rect.xMin, rect.xMax, rect.zMin, freeHeight, mat, [], -1),
-    ...wallAlongZ(rect.zMin, rect.zMax, rect.xMin, freeHeight, mat, [], -1),
-    ...wallAlongZ(rect.zMin, rect.zMax, rect.xMax, freeHeight, mat, eastHoles, 1),
+    ...westWall,
+    ...wallAlongZ(rect.zMin, rect.zMax, rect.xMax, DOOR_TOP, mat, eastHoles, 1),
+    ...wallAlongZ(rect.zMin, rect.zMax, rect.xMax, freeHeight, mat, [], 1, DOOR_TOP),
   ].map((w) => ({ ...w, outer: true }));
 }
 
-function buildInnerWalls(layout: WarehouseLayout): WallMesh[] {
+/**
+ * Tabiques de las cámaras de frío y congelado (`buildPartitions`): cada hueco mide ≥ 7 m y está centrado en una
+ * calle del grafo. Seco, el área de flejado y Expedición quedan abiertos (sin la antigua banda baja de z = 50,
+ * que dejaba un hueco estrecho por muelle). Incluye también el muro entre la nave y la sala anexa ('annex-e').
+ */
+function buildInnerWalls(): WallMesh[] {
   const cameraPanels = lambert(0xc9d4e6);
-  const southHoles = layout.docks
-    .filter((d) => d.face === 'south')
-    .map((d) => ({ xMin: d.x - 1.5, xMax: d.x + 1.5 }));
-
-  return [
-    // Tabique x=30 (seco | frío / fyV), con puertas hacia fyV y Expedición.
-    ...wallAlongZ(-80, 50, 30, 9.5, cameraPanels, [
-      { xMin: -32.5, xMax: -18 },
-      { xMin: 45, xMax: 50 },
-    ], 1),
-    // Límite sur de Frío / norte de fyV y Congelado: z=−25, hasta el pasillo de servicio este.
-    ...wallAlongX(30, EAST_CORRIDOR_OPEN.xMin, -25, 9.5, cameraPanels, [
-      { xMin: 30, xMax: 36 },
-      { xMin: 66, xMax: 72 },
-    ], 1),
-    // Tabique x=70 (fyV | congelado), con puerta y salida.
-    ...wallAlongZ(-25, 50, 70, 9.5, cameraPanels, [
-      { xMin: 0, xMax: 5 },
-      { xMin: 47, xMax: 50 },
-    ], 1),
-    // Banda baja z=50 hacia Expedición: pasillos que atraviesan las máquinas y el de servicio este.
-    ...wallAlongX(-125, 125, 50, 3.0, cameraPanels, [...southHoles, EAST_CORRIDOR_OPEN], 1),
-  ];
+  return buildPartitions().flatMap((p) => {
+    const holes = p.holes.map(([a, b]) => ({ xMin: a, xMax: b }));
+    const dir = p.normalDir ?? 1;
+    return p.along === 'x'
+      ? wallAlongX(p.from, p.to, p.at, p.height, cameraPanels, holes, dir)
+      : wallAlongZ(p.from, p.to, p.at, p.height, cameraPanels, holes, dir);
+  });
 }
 
 /**
@@ -322,15 +431,25 @@ function buildDockFurniture(layout: WarehouseLayout): THREE.Group {
   const plinth = box(plinthW, H, plinthD, concreteMaterial(plinthW, plinthD), (rect.xMin + rect.xMax) / 2, H / 2, (rect.zMin + rect.zMax) / 2);
   plinth.name = 'nave-plinth';
   group.add(plinth);
+  // La sala anexa se levanta sobre el mismo zócalo: su piso queda también a 1,2 m.
+  const annex = layout.building.annex;
+  if (annex) {
+    const aw = annex.xMax - annex.xMin;
+    const ad = annex.zMax - annex.zMin;
+    const annexPlinth = box(aw, H, ad, concreteMaterial(aw, ad), (annex.xMin + annex.xMax) / 2, H / 2, (annex.zMin + annex.zMax) / 2);
+    annexPlinth.name = 'nave-annex-plinth';
+    group.add(annexPlinth);
+  }
 
   for (const block of dockBlocks(layout.docks)) {
     const face = block.face;
     const fv = FACE_V[face];
     // Escalera peatonal junto al bloque: sube desde el patio hasta el piso de la nave.
     const su = dockStairX(block);
-    // Tres huellas intermedias: la primera a H-0,3 m y la última a 0,3 m; la última contrahuella llega al patio.
-    for (let k = 0; k < STAIR_RISERS - 1; k++) {
-      const top = H - (k + 1) * STAIR_RISE;
+    // Cuatro huellas: la más cercana al muro queda a H (el piso de la nave, a la altura del hueco de la puerta)
+    // y la más alejada a 0,3 m; cada bloque va desde el patio hasta su cota.
+    for (let k = 0; k < STAIR_RISERS; k++) {
+      const top = H - k * STAIR_RISE;
       const vc = fv + 0.2 + (k + 0.5) * STAIR_TREAD;
       group.add(boxUV(face, su - 0.7, su + 0.7, vc - STAIR_TREAD / 2, vc + STAIR_TREAD / 2, 0, top, stepMat));
     }
@@ -401,19 +520,24 @@ function buildRestrooms(layout: WarehouseLayout): THREE.Group {
   return group;
 }
 
-/** Muros de los aseos (3 m, con el hueco de la puerta). Van en innerWalls para que el modo muros los recorte. */
+/**
+ * Muros de los aseos (3 m, con el hueco de la puerta). Van en innerWalls para que el modo muros los recorte.
+ * Cada módulo está pegado a la fachada: el lado que coincide con el muro exterior no lleva muro propio.
+ */
 function buildRestroomWalls(layout: WarehouseLayout): WallMesh[] {
   const mat = lambert(0xdfe6ee);
+  const { rect } = layout.building;
   const out: WallMesh[] = [];
   for (const wc of layout.restrooms) {
     const r = wc.rect;
     const hole = (side: 'n' | 's' | 'e' | 'w'): Span[] =>
       wc.door.side === side ? [{ xMin: wc.door.at - wc.door.width / 2, xMax: wc.door.at + wc.door.width / 2 }] : [];
+    const onFacade = { n: r.zMin <= rect.zMin, s: r.zMax >= rect.zMax, w: r.xMin <= rect.xMin, e: r.xMax >= rect.xMax };
     out.push(
-      ...wallAlongX(r.xMin, r.xMax, r.zMin, 3.0, mat, hole('n'), -1),
-      ...wallAlongX(r.xMin, r.xMax, r.zMax, 3.0, mat, hole('s'), 1),
-      ...wallAlongZ(r.zMin, r.zMax, r.xMin, 3.0, mat, hole('w'), -1),
-      ...wallAlongZ(r.zMin, r.zMax, r.xMax, 3.0, mat, hole('e'), 1),
+      ...(onFacade.n ? [] : wallAlongX(r.xMin, r.xMax, r.zMin, 3.0, mat, hole('n'), -1)),
+      ...(onFacade.s ? [] : wallAlongX(r.xMin, r.xMax, r.zMax, 3.0, mat, hole('s'), 1)),
+      ...(onFacade.w ? [] : wallAlongZ(r.zMin, r.zMax, r.xMin, 3.0, mat, hole('w'), -1)),
+      ...(onFacade.e ? [] : wallAlongZ(r.zMin, r.zMax, r.xMax, 3.0, mat, hole('e'), 1)),
     );
   }
   return out;
@@ -428,7 +552,7 @@ export function buildBuilding(layout: WarehouseLayout): BuildingModel {
   nave.add(buildZoneFloors(layout));
   nave.add(buildRestrooms(layout));
   const outerWalls = buildOuterWalls(layout);
-  const innerWalls = [...buildInnerWalls(layout), ...buildRestroomWalls(layout)];
+  const innerWalls = [...buildInnerWalls(), ...buildRestroomWalls(layout)];
 
   for (const w of outerWalls) nave.add(w.mesh);
   for (const w of innerWalls) nave.add(w.mesh);

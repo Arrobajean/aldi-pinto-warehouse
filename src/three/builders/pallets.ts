@@ -54,6 +54,66 @@ function fuse(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return merged;
 }
 
+/**
+ * Geometría completa de europalé con carga de mercancía y flejes:
+ * - Base: palé de madera real (tablas inferiores, 9 tacos, tablas superiores).
+ * - Carga: cajas de cartón corrugado.
+ * - Flejes: bandas de flejado horizontal y vertical que aseguran la carga al palé.
+ * Altura total 0.764 m, centrado en (0, 0, 0) para que su base esté en -0.382 m.
+ */
+export function buildDynamicPalletGeometry(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const WOOD = 0xc8a46e;
+  const WOOD_DARK = 0xb8935c;
+  const WOOD_LIGHT = 0xd4b27d;
+  const CARTON = 0xd8b580;
+  const STRAP = 0x243242;
+
+  // 1. Tablas inferiores (3 patines de 1.2 x 0.022 x 0.1 m)
+  for (const z of [-0.35, 0, 0.35]) {
+    parts.push(piece(EURO_L, 0.022, 0.1, 0, 0.011, z, WOOD));
+  }
+  // 2. Tacos de madera (9 tacos de 0.145 x 0.100 x 0.08 m)
+  for (const x of [-0.45, 0, 0.45]) {
+    for (const z of [-0.35, 0, 0.35]) {
+      parts.push(piece(0.145, 0.1, 0.08, x, 0.072, z, WOOD_DARK));
+    }
+  }
+  // 3. Tablas superiores (5 tablas de 1.2 x 0.022 x 0.13 m)
+  for (const z of [-0.33, -0.165, 0, 0.165, 0.33]) {
+    parts.push(piece(EURO_L, 0.022, 0.13, 0, EURO_H - 0.011, z, WOOD_LIGHT));
+  }
+
+  // 4. Carga de cajas sobre el palé (1.14 x 0.62 x 0.74 m)
+  const loadH = 0.62;
+  const loadBaseY = EURO_H;
+  parts.push(piece(1.14, loadH, 0.74, 0, loadBaseY + loadH / 2, 0, CARTON));
+
+  // 5. Flejes de sujeción (bandas de flejado de la flejadora)
+  parts.push(piece(1.15, 0.03, 0.75, 0, loadBaseY + loadH * 0.7, 0, STRAP));
+  for (const x of [-0.3, 0.3]) {
+    parts.push(piece(0.025, loadH + EURO_H, 0.75, x, (loadBaseY + loadH) / 2, 0, STRAP));
+  }
+
+  const fused = mergeGeometries(parts);
+  if (!fused) throw new Error('No se pudo fusionar la geometría del palé dinámico');
+
+  // Centrar en Y para que el centro geométrico quede en y = 0
+  const totalH = EURO_H + loadH; // 0.764 m
+  fused.translate(0, -totalH / 2, 0);
+  return fused;
+}
+
+/**
+ * Flejes de un palé en el espacio unitario de su carga (caja de 1 × 1 × 1 centrada en el origen): dos lazos
+ * verticales a ±0,3 m del centro y un lazo horizontal. Se instancian aparte para dibujarlos solo en palés flejados
+ * (y poder apretarlos mientras la flejadora trabaja).
+ */
+export function buildBandGeometries(): { a: THREE.BufferGeometry; b: THREE.BufferGeometry; c: THREE.BufferGeometry } {
+  const vertical = (x: number) => new THREE.BoxGeometry(0.024, 1.03, 1.035).translate(x, 0, 0);
+  return { a: vertical(-0.26), b: vertical(0.26), c: new THREE.BoxGeometry(1.03, 0.05, 1.035).translate(0, 0.2, 0) };
+}
+
 const geometries: Partial<Record<PalletLod, THREE.BufferGeometry>> = {};
 
 /** Geometría del palé (GLB si se ha cargado; si no, procedural). Cacheada por nivel de detalle. */
@@ -89,11 +149,13 @@ export class PalletBatch {
     this.base = new THREE.InstancedMesh(euroPalletGeometry(opts.lod), woodMaterial, count);
     this.load = new THREE.InstancedMesh(unitBox, loadMaterial, count);
     for (const mesh of [this.base, this.load]) {
-      mesh.castShadow = opts.castShadow ?? true;
       mesh.receiveShadow = true;
       mesh.instanceMatrix.setUsage(opts.usage ?? THREE.StaticDrawUsage);
       mesh.frustumCulled = false;
     }
+    // La sombra la proyecta solo la carga (12 triángulos): la de la base (48) queda bajo ella y apenas se ve.
+    this.load.castShadow = opts.castShadow ?? true;
+    this.base.castShadow = false;
     // Solo la carga responde al puntero: la selección de palés sigue por `load`.
     this.base.raycast = () => {};
     batches.add(this);
@@ -110,10 +172,22 @@ export class PalletBatch {
     if (color) this.load.setColorAt(i, color);
   }
 
+  /** Matriz de la carga del palé `i` (para colocar los flejes en el mismo sitio). */
+  loadMatrixAt(i: number, target: THREE.Matrix4): THREE.Matrix4 {
+    this.load.getMatrixAt(i, target);
+    return target;
+  }
+
   /** Oculta el palé `i` en las dos mallas. */
   hide(i: number): void {
     this.base.setMatrixAt(i, zeroScale);
     this.load.setMatrixAt(i, zeroScale);
+  }
+
+  /** Número de instancias que se dibujan (las primeras `n`). */
+  setCount(n: number): void {
+    this.base.count = n;
+    this.load.count = n;
   }
 
   /** Marca las matrices (y colores) para subirlas a la GPU tras cambios. */

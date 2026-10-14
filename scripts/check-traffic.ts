@@ -3,6 +3,7 @@ import { createInitialState } from '../src/lib/sim/init';
 import { makeDeps, tick } from '../src/lib/sim/tick';
 import { formatSimTime } from '../src/lib/sim/clock';
 import { dockApproach } from '../src/lib/layout/dock-geometry';
+import { circlesGap, truckCircles, truckParked } from '../src/lib/sim/traffic';
 
 // Medición de tráfico (fase 0 del plan de correcciones).
 // Simula desde el inicio de turno hasta las 10:00, muestreando 1 vez por segundo simulado
@@ -29,6 +30,11 @@ const maxByStatus: Record<string, number> = {};
 const firstSeen = new Map<string, number>();
 const approachSec = new Map<string, number>();
 let maxDockErr = 0;
+let truckFootprintOverlaps = 0;
+let minTruckGap = Infinity;
+const overlapKinds: Record<string, number> = {};
+const waitRun = new Map<string, number>();
+let maxWaitRun = 0;
 
 let step = 0;
 while (s.ts < END_TS) {
@@ -64,6 +70,30 @@ while (s.ts < END_TS) {
     }
   }
 
+  // Huellas de camiones (5 círculos de 1,6 m): solapes entre cualquier par salvo dos camiones estáticos.
+  const onSite = s.trucks.filter((t) => t.status !== 'offsite' && t.status !== 'done');
+  for (let a = 0; a < onSite.length; a++) {
+    for (let b = a + 1; b < onSite.length; b++) {
+      const ta = onSite[a];
+      const tb = onSite[b];
+      if (truckParked(ta) && truckParked(tb)) continue;
+      if (Math.hypot(ta.pos.x - tb.pos.x, ta.pos.z - tb.pos.z) > 25) continue;
+      const gap = circlesGap(truckCircles(ta.pos.x, ta.pos.z, ta.heading), truckCircles(tb.pos.x, tb.pos.z, tb.heading));
+      minTruckGap = Math.min(minTruckGap, gap);
+      if (gap < 0) {
+        truckFootprintOverlaps++;
+        overlapKinds[`${ta.status}/${ta.stage ?? ''}+${tb.status}/${tb.stage ?? ''}`] = (overlapKinds[`${ta.status}/${ta.stage ?? ''}+${tb.status}/${tb.stage ?? ''}`] ?? 0) + 1;
+      }
+    }
+  }
+
+  // Máquinas: tiempo seguido en espera.
+  for (const m of s.machines) {
+    const w = m.status === 'waiting' ? (waitRun.get(m.id) ?? 0) + 1 : 0;
+    waitRun.set(m.id, w);
+    maxWaitRun = Math.max(maxWaitRun, w);
+  }
+
   // Máquinas activas solapadas.
   const ms = s.machines.filter((m) => m.status === 'traveling' || m.status === 'working' || m.status === 'waiting');
   for (let a = 0; a < ms.length; a++) {
@@ -92,6 +122,10 @@ console.log(
       minTruck_m: round(minTruck),
       maxTrucksByStatus: maxByStatus,
       trucksSeen: firstSeen.size,
+      truckFootprintOverlaps,
+      minTruckFootprintGap_m: round(minTruckGap),
+      truckOverlapKinds: overlapKinds,
+      maxMachineWaitRun_s: maxWaitRun,
       maxAtDockTargetErr_m: round(maxDockErr, 3),
       maxEntriesSameMinute: Math.max(0, ...Object.values(perMinute)),
       approachSec: {

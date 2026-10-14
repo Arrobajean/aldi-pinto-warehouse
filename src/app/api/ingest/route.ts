@@ -27,6 +27,20 @@ function chunkMarkdown(content: string, title: string, category: string, sourceU
 }
 
 // TODO: tokens en vez de palabras (los límites están bien para un primer pase).
+async function loadKnowledgeDocs(kbDir: string) {
+  const files = (await readdir(kbDir)).filter((f) => f.endsWith('.md'));
+  const docs = await Promise.all(
+    files.map(async (file) => {
+      const raw = await readFile(path.join(kbDir, file), 'utf8');
+      const titleMatch = /^#\s+(.+)$/m.exec(raw);
+      const title = titleMatch?.[1] ?? file.replace(/\.md$/, '');
+      return { file, title, category: 'kb', content: raw.replace(/^#\s+.+$/m, '').trim() };
+    }),
+  );
+  return { files, docs };
+}
+
+// TODO: tokens en vez de palabras (los límites están bien para un primer pase).
 export async function POST(req: Request) {
   const secret = req.headers.get('x-ingest-secret');
   if (!process.env.INGEST_SECRET || secret !== process.env.INGEST_SECRET) {
@@ -34,15 +48,7 @@ export async function POST(req: Request) {
   }
 
   const kbDir = path.join(process.cwd(), 'kb');
-  const files = (await readdir(kbDir)).filter((f) => f.endsWith('.md'));
-  const docs: { file: string; title: string; category: string; content: string }[] = [];
-  for (const file of files) {
-    const raw = await readFile(path.join(kbDir, file), 'utf8');
-    // Primer encabezado = título; si no, nombre del fichero.
-    const titleMatch = /^#\s+(.+)$/m.exec(raw);
-    const title = titleMatch?.[1] ?? file.replace(/\.md$/, '');
-    docs.push({ file, title, category: 'kb', content: raw.replace(/^#\s+.+$/m, '').trim() });
-  }
+  const { files, docs } = await loadKnowledgeDocs(kbDir);
 
   const allChunks = docs.flatMap((d) => chunkMarkdown(d.content, d.title, d.category, `kb/${d.file}`));
   const toHash = (s: string) => {
@@ -53,17 +59,18 @@ export async function POST(req: Request) {
 
   const { embeddings } = await embedTexts(allChunks.map((c) => c.content), 'RETRIEVAL_DOCUMENT');
 
-  let inserted = 0;
-  for (let i = 0; i < allChunks.length; i++) {
-    const emb = embeddings[i];
-    if (!emb || emb.length === 0) continue;
-    await upsertChunk({
-      ...allChunks[i],
-      embedding: emb,
-      content_hash: toHash(allChunks[i].content),
-    });
-    inserted++;
-  }
+  const upsertResults = await Promise.all(
+    allChunks.map((chunk, i) => {
+      const emb = embeddings[i];
+      if (!emb || emb.length === 0) return Promise.resolve(false);
+      return upsertChunk({
+        ...chunk,
+        embedding: emb,
+        content_hash: toHash(chunk.content),
+      }).then(() => true);
+    }),
+  );
+  const inserted = upsertResults.filter(Boolean).length;
 
   return NextResponse.json({ ok: true, files: files.length, chunks: allChunks.length, inserted });
 }

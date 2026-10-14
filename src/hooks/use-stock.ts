@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import type { WarehouseScene, StockSelection } from '@/three/warehouse-scene';
 import { STOCK_MODES, type StockColorMode } from '@/lib/stock/colors';
 import { articleForSku } from '@/lib/stock/catalog';
@@ -25,13 +25,17 @@ export function useStock(sceneRef: MutableRefObject<WarehouseScene | null>, simS
     sceneRef.current?.setStockColorMode(mode);
   }, [mode, sceneRef]);
 
+  const simStateRef = useRef(simState);
+  useEffect(() => {
+    simStateRef.current = simState;
+  }, [simState]);
+
   // Alertas de stock periódicas (caducidad, mínimos de picking y saturación).
   useEffect(() => {
-    if (!simState) return;
     const evalAlerts = () => {
+      const s = simStateRef.current;
+      if (!s) return;
       const out: StockAlert[] = [];
-      const scene = sceneRef.current;
-      const s = simState;
 
       // Caducidad próxima: palets en rack con < 8 días.
       let expiring = 0;
@@ -45,24 +49,22 @@ export function useStock(sceneRef: MutableRefObject<WarehouseScene | null>, simS
 
       // Picking bajo mínimo por categoría.
       for (const temp of ['dry', 'cool', 'frozen'] as const) {
-        if (s.pickingByTemp[temp].length < 4) {
-          out.push({ id: `min-${temp}-${s.ts}`, severity: 'warning', message: `Picking de ${temp} bajo mínimo (${s.pickingByTemp[temp].length}) → reposición`, ts: s.ts });
+        const list = s.pickingByTemp[temp];
+        if (list && list.length < 4) {
+          out.push({ id: `min-${temp}-${s.ts}`, severity: 'warning', message: `Picking de ${temp} bajo mínimo (${list.length}) → reposición`, ts: s.ts });
         }
       }
 
-      // Saturación de zona (cada 60 s).
-      if (Math.floor(s.ts / 60) !== Math.floor((s.ts - 1) / 60)) {
-        void scene;
-      }
       setAlerts(out.slice(0, 8));
     };
+
     evalAlerts();
     const id = setInterval(evalAlerts, 5000);
     return () => clearInterval(id);
-  }, [simState, sceneRef]);
+  }, []);
 
 
-  const search = () => {
+  const search = useCallback(() => {
     const q = query.trim().toUpperCase();
     const scene = sceneRef.current;
     if (!scene || q.length === 0) return;
@@ -73,6 +75,12 @@ export function useStock(sceneRef: MutableRefObject<WarehouseScene | null>, simS
         setSelection(sel);
       }
       return;
+    }
+    const AISLE_RE = /^(S|F|C)-\d{2}$/i;
+    if (AISLE_RE.test(q)) {
+      if (scene.focusAisle(q)) {
+        return;
+      }
     }
     if (q.startsWith('SKU-')) {
       const locs = scene.getSkuLocations(q);
@@ -91,7 +99,7 @@ export function useStock(sceneRef: MutableRefObject<WarehouseScene | null>, simS
         setSelection(scene.stockSelection(locs[0].locId));
       }
     }
-  };
+  }, [query, sceneRef]);
 
   const modeLabel = useMemo(() => STOCK_MODES.find((m) => m.id === mode)?.label ?? mode, [mode]);
 
@@ -104,7 +112,7 @@ function getArticlesMatching(q: string): string[] {
   const out: string[] = [];
   for (let i = 0; i < 1800 && out.length < 3; i++) {
     const article = articleForSku(`SKU-${1000 + i}`);
-    const hay = `${article.name} ${article.family}`.toLowerCase();
+    const hay = `${article.name} ${article.brand} ${article.commercialCategory} ${article.family}`.toLowerCase();
     if (needles.every((n) => hay.includes(n))) out.push(article.sku);
   }
   return out;

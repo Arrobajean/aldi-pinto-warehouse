@@ -1,11 +1,13 @@
-import type { SimEvent, SimEventType, SimState } from '@/lib/sim/types';
 import { formatSimTime } from '@/lib/sim/clock';
+import type { SimEvent, SimEventType, SimState } from '@/lib/sim/types';
 
 let nextId = 0;
+let nextEventSeq = 0;
 
 /** Emite un evento tipado con el timestamp de simulación del estado. */
 export function emitEvent(state: SimState, type: SimEventType, message: string, meta?: Record<string, unknown>): SimEvent {
   const ev: SimEvent = {
+    id: `ev-${++nextEventSeq}`,
     ts: state.ts,
     type,
     message,

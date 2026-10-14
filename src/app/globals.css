@@ -1,46 +1,123 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-@theme {
-  /* Paleta oscura por defecto */
-  --color-bg: #0b1220;
-  --color-panel: #111a2e;
-  --color-panel-strong: #16213b;
-  --color-line: #22304d;
-  --color-fg: #e6ecf5;
-  --color-muted: #93a3bf;
-  --color-accent: #22a6e0;
-  --color-orange: #f39200;
-  --color-ok: #2ecc71;
-  --color-warn: #f5b301;
-  --color-alert: #ff5d5d;
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.625rem;
+
+  /* Superficies */
+  --background: #0b1220;
+  --foreground: #e6ecf5;
+  --card: #111a2e;
+  --card-foreground: #e6ecf5;
+  --popover: #16213b;
+  --popover-foreground: #e6ecf5;
+
+  /* Marca */
+  --primary: #22a6e0;
+  --primary-foreground: #05121f;
+
+  --secondary: #16213b;
+  --secondary-foreground: #e6ecf5;
+
+  --muted: #16213b;
+  --muted-foreground: #93a3bf;
+
+  --accent: #22304d;
+  --accent-foreground: #e6ecf5;
+
+  --destructive: #ff5d5d;
+  --destructive-foreground: #ffffff;
+
+  --success: #2ecc71;
+  --warning: #f5b301;
+  --orange: #f39200;
+
+  --border: #22304d;
+  --input: #22304d;
+  --ring: #22a6e0;
+
+  /* Sidebar */
+  --sidebar: #0e1728;
+  --sidebar-foreground: #e6ecf5;
+  --sidebar-primary: #22a6e0;
+  --sidebar-primary-foreground: #05121f;
+  --sidebar-accent: #16213b;
+  --sidebar-accent-foreground: #e6ecf5;
+  --sidebar-border: #22304d;
+  --sidebar-ring: #22a6e0;
 
   /* Colores de zona, coherentes entre UI y 3D */
-  --color-zone-seco: #c9ced6;
-  --color-zone-frio: #7cc4f0;
-  --color-zone-congelado: #b9e3ff;
-  --color-zone-fyv: #8fd694;
-  --color-zone-expedicion: #f5d06b;
+  --zone-seco: #c9ced6;
+  --zone-frio: #7cc4f0;
+  --zone-congelado: #b9e3ff;
+  --zone-fyv: #8fd694;
+  --zone-expedicion: #f5d06b;
+}
 
-  /* Tipografía */
-  --font-ui: var(--font-jakarta), system-ui, sans-serif;
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-orange: var(--orange);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-zone-seco: var(--zone-seco);
+  --color-zone-frio: var(--zone-frio);
+  --color-zone-congelado: var(--zone-congelado);
+  --color-zone-fyv: var(--zone-fyv);
+  --color-zone-expedicion: var(--zone-expedicion);
+
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 
-  /* Radios y sombras */
-  --radius-card: 0.625rem;
-  --shadow-card: 0 6px 24px rgb(0 0 0 / 0.35);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
-html,
-body,
-#root {
-  margin: 0;
-  height: 100%;
-  overflow: hidden;
-}
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
 
-body {
-  background: var(--color-bg);
-  color: var(--color-fg);
-  font-family: var(--font-ui);
-  -webkit-font-smoothing: antialiased;
+  html,
+  body,
+  #root {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
 }

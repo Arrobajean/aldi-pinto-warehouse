@@ -3,17 +3,29 @@
  * donde arranca el tramo (el camión la recibe con su posición delante: ver `followPath`).
  *
  * Circulación (x = este, z = sur):
- * - Entrada: vial perimetral norte (z = 178) hacia el oeste, vial este (x = 203) hacia el norte y báscula
+ * - Entrada: vial perimetral norte (z = 178) hacia el oeste, vial este (x = 201) hacia el norte y báscula
  *   (z = 150) hacia el oeste. Espera antes de la báscula en SCALE_HOLD.
- * - Distribuidor: x = 150 hacia el norte (es el carril de aproximación de la batería este).
- * - Sur: carril de aproximación z = 105 hacia el oeste y carril de salida z = 117,5 hacia el este.
- * - Este: aproximación x = 150 hacia el norte y salida x = 162,5 hacia el sur.
- * - Salida: z = 117,5 hasta x = 207, al sur por x = 207 y al este por z = 182.
- * - Bucle de reentrada (camiones que salen de una plaza de espera): z = 117,5 → x = 190 → z = 145 → x = 150.
+ * - Distribuidor: al bajar de la báscula, giro a la derecha hasta x ≈ 145 y de ahí al norte; los de la batería
+ *   este se incorporan en diagonal a su carril de aproximación (x = fachada este + 25).
+ * - Sur: carril de aproximación z = 105 hacia el oeste y carril de salida z = 117,5 hacia el este (los que
+ *   salen de un muelle se incorporan desde z ≈ 123,6: salen rectos hasta librar a los vecinos).
+ * - Este: aproximación x = fachada + 25 hacia el norte y salida x = fachada + 43,6 hacia el sur.
+ * - Salida: z = 117,5 hasta x = 209, al sur por x = 209 y al este por z = 170 (8 m entre entrada y salida:
+ *   en las curvas el remolque barre hacia fuera). Entrada y salida paran cada una ante su barrera (ver `atBarrier`).
+ * - Bucle de reentrada (camiones que salen de una plaza de espera): z = 117,5 → x = 190 → z = 145 → carril este.
  * Las esquinas se redondean con un radio mayor que el de giro mínimo; los arcos de atraque son exactos.
  */
 import type { Dock, YardStall } from '@/lib/layout/types';
-import { DOCK_TURN_RADIUS, FACE_V, YARD_APPROACH_V, YARD_EXIT_V, dockApproach, dockU } from '@/lib/layout/dock-geometry';
+import {
+  DOCK_EDGE_DEPTH,
+  DOCK_TURN_RADIUS,
+  FACE_V,
+  TRUCK_REAR_LOCAL,
+  YARD_APPROACH_V,
+  YARD_EXIT_V,
+  dockApproach,
+  dockU,
+} from '@/lib/layout/dock-geometry';
 import type { Point } from '@/lib/sim/types';
 
 /** Radio de las esquinas de los carriles (algo mayor que el de giro mínimo, para que el seguimiento sea holgado). */
@@ -22,11 +34,15 @@ const CORNER_R = 13;
 const ARC_STEP = 1.5;
 
 export const TRUCK_SPAWN: Point = { x: 260, z: 178 };
-export const TRUCK_DESPAWN: Point = { x: 260, z: 182 };
+export const TRUCK_DESPAWN: Point = { x: 260, z: 170 };
+/** Origen del camión parado ante la barrera de entrada (cabina 2,5 m antes de la línea x = 238). */
+export const GATE_STOP: Point = { x: 245.3, z: 178 };
+/** Origen del camión parado ante la barrera de salida (cabina 2,5 m antes de la línea x = 238). */
+export const EXIT_GATE_STOP: Point = { x: 230.7, z: 170 };
 /** Rumbo de entrada (hacia el oeste). */
 export const SPAWN_HEADING = Math.PI / 2;
-const IN_CORNER: Point = { x: 203, z: 178 };
-const IN_TURN: Point = { x: 203, z: 150 };
+const IN_CORNER: Point = { x: 201, z: 178 };
+const IN_TURN: Point = { x: 201, z: 150 };
 /** Espera antes de la báscula: un camión detrás del que está pesando. */
 export const SCALE_HOLD: Point = { x: 182, z: 150 };
 /** Origen del camión centrado sobre la báscula (160, 150): el centro del camión está 2,15 m detrás del origen. */
@@ -35,11 +51,11 @@ export const SCALE_STOP: Point = { x: 157.8, z: 150 };
 const IN_LANE_X = FACE_V.east + YARD_APPROACH_V;
 const SOUTH_APPROACH_Z = FACE_V.south + YARD_APPROACH_V;
 const SOUTH_EXIT_Z = FACE_V.south + YARD_EXIT_V;
-const EAST_EXIT_X = FACE_V.east + YARD_EXIT_V;
-const OUT_X = 207;
-const OUT_Z = 182;
+const OUT_X = 209;
+const OUT_Z = 170;
 const LOOP_X = 190;
-const LOOP_Z = 145;
+/** Tramo oeste del bucle de reentrada: a 9 m del carril de la báscula (z = 150), para que el remolque que sale del giro no roce al camión que espera para pesar. */
+const LOOP_Z = 141;
 /** Origen del camión aparcado de frente en una plaza (fila z = 130, plazas de 17 m): trasera a z ≈ 127,9. */
 const STALL_PARK_DEPTH = 9.5;
 /** Retroceso recto al salir de la plaza antes de girar. */
@@ -114,21 +130,41 @@ function dockArc(dock: Dock): Point[] {
 
 /** De la entrada de la parcela a la espera de la báscula. */
 export function gateRoute(): Point[] {
-  return fillet([TRUCK_SPAWN, IN_CORNER, IN_TURN, SCALE_HOLD]).slice(1);
+  return fillet([TRUCK_SPAWN, GATE_STOP, IN_CORNER, IN_TURN, SCALE_HOLD]).slice(1);
 }
 
-/** Origen del distribuidor: desde la báscula o desde el bucle de reentrada. */
-function feeder(from: 'scale' | Point): Point[] {
-  // La báscula está a solo 8 m del distribuidor: el camión gira a la derecha nada más bajar (radio 13)
-  // y se incorpora a x = 150 con una diagonal suave.
-  if (from === 'scale') return [SCALE_STOP, ...arcPoints(SCALE_STOP, { x: -1, z: 0 }, 'right', CORNER_R), { x: IN_LANE_X, z: 120 }];
-  return [from, { x: LOOP_X, z: SOUTH_EXIT_Z }, { x: LOOP_X, z: LOOP_Z }, { x: IN_LANE_X, z: LOOP_Z }];
+/**
+ * Corta una ruta en la parada de una barrera: el camión se detiene en `stop` y el resto queda como `nextRoute`
+ * (la sim lo reanuda tras la espera de la barrera). Si `stop` no está en la ruta, no hay parada.
+ */
+export function atBarrier(route: Point[], stop: Point): { route: Point[]; nextRoute: Point[] } {
+  const i = route.findIndex((p) => p.x === stop.x && p.z === stop.z);
+  return i < 0 ? { route, nextRoute: [] } : { route: route.slice(0, i + 1), nextRoute: route.slice(i + 1) };
+}
+
+/** Carril norte al bajar de la báscula: un radio de giro al oeste de la báscula. */
+const SCALE_EXIT_X = SCALE_STOP.x - CORNER_R;
+
+/**
+ * Tramo hasta el carril norte desde la báscula o desde el bucle de reentrada. Devuelve los puntos y la x del
+ * carril norte en el que acaba (para girar al oeste hacia los muelles sur).
+ */
+function feeder(from: 'scale' | Point, face: Dock['face']): { pts: Point[]; laneX: number } {
+  if (from === 'scale') {
+    // El camión gira a la derecha nada más bajar de la báscula (radio 13).
+    const arc = arcPoints(SCALE_STOP, { x: -1, z: 0 }, 'right', CORNER_R);
+    if (face === 'south') return { pts: [SCALE_STOP, ...arc], laneX: SCALE_EXIT_X };
+    // Batería este: diagonal suave hasta su carril de aproximación, antes de las zonas de sus muelles.
+    return { pts: [SCALE_STOP, ...arc, { x: SCALE_EXIT_X, z: 130 }, { x: IN_LANE_X, z: 100 }], laneX: IN_LANE_X };
+  }
+  return { pts: [from, { x: LOOP_X, z: SOUTH_EXIT_Z }, { x: LOOP_X, z: LOOP_Z }, { x: IN_LANE_X, z: LOOP_Z }], laneX: IN_LANE_X };
 }
 
 /** Ruta hasta el punto de parada de la maniobra de un muelle (sin incluir la marcha atrás). */
 export function approachRoute(from: 'scale' | Point, dock: Dock): Point[] {
   const a = dockApproach(dock);
-  const lanes = dock.face === 'south' ? [...feeder(from), { x: IN_LANE_X, z: SOUTH_APPROACH_Z }, a.start] : [...feeder(from), a.start];
+  const f = feeder(from, dock.face);
+  const lanes = dock.face === 'south' ? [...f.pts, { x: f.laneX, z: SOUTH_APPROACH_Z }, a.start] : [...f.pts, a.start];
   return [...fillet(lanes).slice(1), ...dockArc(dock)];
 }
 
@@ -146,7 +182,8 @@ export function stallPoint(stall: YardStall): Point {
 export function stallRoute(stall: YardStall): Point[] {
   const sx = stallX(stall);
   const start = { x: sx + DOCK_TURN_RADIUS, z: SOUTH_APPROACH_Z };
-  const lanes = [...feeder('scale'), { x: IN_LANE_X, z: SOUTH_APPROACH_Z }, start];
+  const f = feeder('scale', 'south');
+  const lanes = [...f.pts, { x: f.laneX, z: SOUTH_APPROACH_Z }, start];
   return [...fillet(lanes).slice(1), ...arcPoints(start, { x: -1, z: 0 }, 'left'), stallPoint(stall)];
 }
 
@@ -161,23 +198,26 @@ export function unparkEnd(stall: YardStall): Point {
   return { x: stallX(stall) - DOCK_TURN_RADIUS, z: SOUTH_EXIT_Z };
 }
 
+/**
+ * Avance recto al salir de un muelle antes de girar: la trasera del remolque (11,6 m detrás del origen) debe
+ * dejar atrás las cabinas de los vecinos atracados (origen a 14,1 m de la fachada, cabina 4,8 m por delante),
+ * porque al girar la trasera barre unos 4,5 m hacia el lado contrario al giro.
+ */
+const PULLOUT_STRAIGHT_V = DOCK_EDGE_DEPTH + 0.1 + TRUCK_REAR_LOCAL + 4.8 + TRUCK_REAR_LOCAL + 0.6;
+
 /** Salida de un muelle: avance recto, giro hacia el carril de salida y fuera de la parcela. */
 export function pulloutRoute(dock: Dock): Point[] {
   const u = dockU(dock);
   if (dock.face === 'south') {
-    const p = { x: u, z: SOUTH_APPROACH_Z };
+    const p = { x: u, z: FACE_V.south + PULLOUT_STRAIGHT_V };
     const arc = arcPoints(p, { x: 0, z: 1 }, 'left');
     const end = arc[arc.length - 1];
-    return [p, ...arc, ...fillet([end, { x: OUT_X, z: SOUTH_EXIT_Z }, { x: OUT_X, z: OUT_Z }, TRUCK_DESPAWN]).slice(1)];
+    return [p, ...arc, ...fillet([end, { x: OUT_X, z: SOUTH_EXIT_Z }, { x: OUT_X, z: OUT_Z }, EXIT_GATE_STOP, TRUCK_DESPAWN]).slice(1)];
   }
-  const p = { x: IN_LANE_X, z: u };
+  const p = { x: FACE_V.east + PULLOUT_STRAIGHT_V, z: u };
   const arc = arcPoints(p, { x: 1, z: 0 }, 'right');
   const end = arc[arc.length - 1];
-  return [
-    p,
-    ...arc,
-    ...fillet([end, { x: EAST_EXIT_X, z: SOUTH_EXIT_Z }, { x: OUT_X, z: SOUTH_EXIT_Z }, { x: OUT_X, z: OUT_Z }, TRUCK_DESPAWN]).slice(1),
-  ];
+  return [p, ...arc, ...fillet([end, { x: end.x, z: SOUTH_EXIT_Z }, { x: OUT_X, z: SOUTH_EXIT_Z }, { x: OUT_X, z: OUT_Z }, EXIT_GATE_STOP, TRUCK_DESPAWN]).slice(1)];
 }
 
 /** Polilíneas de todos los carriles (para dibujarlos o comprobarlos). */

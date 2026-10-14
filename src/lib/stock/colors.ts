@@ -11,20 +11,35 @@ export const STOCK_MODES: { id: StockColorMode; label: string }[] = [
 ];
 
 const FAMILY_COLORS: Record<string, number> = {
-  'Conservas': 0xd8b45a,
-  'Bebidas': 0x4aa3df,
-  'Bazar': 0xb48ad9,
+  // Seco
+  'Bebidas': 0x2980b9,
   'Legumbres': 0xb0875a,
-  'Aceites y salsas': 0xd9a441,
-  'Lácteos': 0x9fd8ef,
-  'Cerdo y carnes': 0xe09a7b,
-  'Zumos': 0x8fd694,
-  'Congelados pescado': 0x9cc7ee,
-  'Congelados platos': 0xa9b8c9,
-  'Helados': 0xcad6e6,
+  'Conservas': 0xd4ac0d,
+  'Aceites y salsas': 0xf39c12,
+  'Panadería y bollería': 0xd35400,
+  'Limpieza y droguería': 0x16a085,
+  'Higiene y cosmética': 0xaf7ac5,
+  'Bazar': 0x884ea0,
+  // Frío
+  'Lácteos': 0x85c1e9,
+  'Charcutería': 0xc0392b,
+  'Cerdo y carnes': 0xe74c3c,
+  'Platos preparados': 0xf1c40f,
+  'Zumos': 0x27ae60,
   'Frutas': 0x8fdb7c,
   'Verduras': 0x6fbb4f,
+  // Congelado
+  'Panadería congelada (bake-off)': 0xe59866,
+  'Patatas y verduras congeladas': 0x58d68d,
+  'Hielo': 0x7fb3d5,
+  'Congelados pescado': 0x5dade2,
+  'Congelados platos': 0x85929e,
+  'Helados': 0xf1948a,
 };
+
+export function colorForFamily(family: string): number {
+  return FAMILY_COLORS[family] ?? 0x1abc9c;
+}
 
 export function colorForStock(mode: StockColorMode, _sku: string, _temp: string, expiryDays: number, article: StockArticle): number {
   switch (mode) {
